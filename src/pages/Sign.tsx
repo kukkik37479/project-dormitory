@@ -1,4 +1,4 @@
-// src/components/Sign.tsx  (หรือ src/pages/Sign.tsx ถ้าคุณแยกเป็น pages)
+// src/components/Sign.tsx 
 import { useState } from "react";
 import logosi from "../assets/logosi.png";
 
