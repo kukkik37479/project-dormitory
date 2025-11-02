@@ -4,7 +4,7 @@ import { useParams, Link } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 
-const DORM_ID = "dormId";
+const DORM_ID = localStorage.getItem("currentDormId") || "dormId";
 
 type Room = {
   id: string;
