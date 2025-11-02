@@ -28,7 +28,7 @@ export default function Homepage() {
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           {/* ปุ่มเข้าหน้ารายการห้อง แนะนำให้พาไป /rooms แทน / (จะได้ไม่วนหน้าเดิม) */}
           <Link
-            to="/rooms"
+            to="/Explore"
             className="h-12 px-6 rounded-lg bg-black text-rose-400 font-extrabold
                        shadow-[0_4px_4px_rgba(0,0,0,0.25)] flex items-center justify-center
                        w-full sm:w-auto"
@@ -43,15 +43,6 @@ export default function Homepage() {
                        w-full sm:w-auto"
           >
             เข้าสู่ระบบ
-          </Link>
-
-          <Link
-            to="/sign"
-            className="h-12 px-6 rounded-lg bg-black text-rose-400 font-extrabold
-                       shadow-[0_4px_4px_rgba(240,98,146,0.30)] flex items-center justify-center
-                       w-full sm:w-auto"
-          >
-            ลงทะเบียนสำหรับเจ้าของหอพัก
           </Link>
         </div>
       </div>

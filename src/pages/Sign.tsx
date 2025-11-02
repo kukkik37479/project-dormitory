@@ -62,6 +62,8 @@ async function registerOwnerAndCreateDorm(params: {
     status: "active",
     createdAt: now,
     updatedAt: now,
+    isPublic: true,     // ให้แสดงในหน้า Explore
+    coverImage: null,   // ยังไม่มีรูปก็ปล่อยเป็น null ก่อน
   });
 
   // seed ตัวนับ
