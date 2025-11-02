@@ -1,11 +1,15 @@
+// src/router.tsx
 import { createBrowserRouter } from "react-router-dom";
-import Homepasg from "./pages/Homepage";
+import Homepage from "./pages/Homepage";
 import Login from "./pages/Login";
-import Sign from "./pages/Sign";   // <-- หน้า sign (สมัครสมาชิก)
-// import Home from "./components/Home";   // ตัวอย่างหน้าอื่น
+// import Sign from "./pages/Sign";
+import Rooms from "./pages/Rooms";
 
-export const router = createBrowserRouter([
-  { path: "/", element: <Homepasg /> }, 
+const router = createBrowserRouter([
+  { path: "/", element: <Homepage /> },
   { path: "/login", element: <Login /> },
-  { path: "/sign", element: <Sign /> },
+  // { path: "/sign", element: <Sign /> },
+  { path: "/rooms", element: <Rooms /> },
 ]);
+
+export default router;

@@ -1,4 +1,3 @@
-// src/pages/Rooms.tsx
 import { useEffect, useState } from "react";
 import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
