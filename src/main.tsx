@@ -1,11 +1,14 @@
 // src/main.tsx
 import React from "react";
-import ReactDOM from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
-import router from "./router";     // <- default import
+import router from "./router";      // <- default export
 import "./index.css";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+const rootEl = document.getElementById("root");
+if (!rootEl) throw new Error("Root element #root not found");
+
+createRoot(rootEl).render(
   <React.StrictMode>
     <RouterProvider router={router} />
   </React.StrictMode>

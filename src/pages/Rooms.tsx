@@ -1,69 +1,57 @@
 // src/pages/Rooms.tsx
-import type React from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp} from "firebase/firestore";
+import { collection, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
+import { useOwnerDormName } from "../hooks/useOwnerDormName";
 
 type Room = {
   id: string;
   roomNumber: string;
   floor: number;
   pricePerMonth: number;
-  status: "vacant" | "occupied" | "maintenance" | string;
+  status: "vacant" | "occupied" | "maintenance";
   tenantName?: string | null;
   cooling?: "air" | "fan";
 };
 
-function getCurrentDormId(): string {
-  return localStorage.getItem("currentDormId") ?? "";
-}
-
 export default function Rooms() {
-  const dormId = getCurrentDormId();
-
+  const { dormId, loading: loadingDorm } = useOwnerDormName();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
 
   useEffect(() => {
     if (!dormId) {
+      setRooms([]);
       setLoading(false);
       return;
     }
+    setLoading(true);
 
-    const q = query(
-      collection(db, "dorms", dormId, "rooms"),
-      orderBy("roomNumber")
-    );
-
+    // ไม่ใส่ orderBy เพื่อลดการต้องสร้าง index — sort ฝั่ง client แทน
+    const ref = collection(db, "dorms", dormId, "rooms");
     const unsub = onSnapshot(
-      q,
+      ref,
       (snap) => {
-        const list = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Room, "id">),
-        }));
-        // จัดเรียงตามเลขห้อง (เป็นตัวเลขจริง)
-        list.sort((a,b) => Number(a.roomNumber) - Number(b.roomNumber));
-        setRooms(list as Room[]);
+        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Room, "id">) })) as Room[];
+        list.sort((a, b) => Number(a.roomNumber) - Number(b.roomNumber));
+        setRooms(list);
         setLoading(false);
       },
       (err) => {
-        console.error("onSnapshot error:", err);
+        console.error("rooms onSnapshot:", err);
+        setRooms([]);
         setLoading(false);
       }
     );
-
     return () => unsub();
   }, [dormId]);
 
   const statusBadgeClass = (status: Room["status"]) => {
-    if (status === "vacant")
-      return "bg-green-50 text-green-700 border border-green-200";
-    if (status === "maintenance")
-      return "bg-amber-50 text-amber-700 border border-amber-200";
-    return "bg-rose-50 text-rose-700 border border-rose-200";
+    if (status === "vacant") return "bg-green-50 text-green-700 border border-green-200";
+    if (status === "maintenance") return "bg-amber-50 text-amber-700 border border-amber-200";
+    return "bg-rose-50 text-rose-700 border border-rose-200"; // occupied
   };
 
   return (
@@ -83,50 +71,33 @@ export default function Rooms() {
 
       {/* Content */}
       <main className="mx-auto w-full max-w-7xl px-4 pb-10">
-        {!dormId ? (
-          <p className="text-rose-600">
-            ยังไม่ได้เลือก/สร้างหอพักครับ — โปรดสมัคร/เข้าสู่ระบบให้ระบบตั้งค่า
-            <code className="mx-1 bg-black/5 px-2 py-0.5 rounded">currentDormId</code>{" "}
-            ใน localStorage ก่อน
-          </p>
+        {loadingDorm ? (
+          <p className="text-gray-500">กำลังโหลดหอของคุณ…</p>
+        ) : !dormId ? (
+          <p className="text-rose-600">ยังไม่ได้เลือก/สร้างหอพัก</p>
         ) : loading ? (
-          <p className="text-gray-500">กำลังโหลด...</p>
+          <p className="text-gray-500">กำลังโหลด…</p>
         ) : rooms.length === 0 ? (
           <p className="text-gray-500">ยังไม่มีข้อมูลห้อง</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {rooms.map((room) => (
-              <div
-                key={room.id}
-                className="rounded-2xl bg-white p-4 shadow-sm border border-rose-100"
-              >
+              <div key={room.id} className="rounded-2xl bg-white p-4 shadow-sm border border-rose-100">
                 <div className="flex items-start justify-between">
-                  <h2 className="text-lg font-semibold text-rose-700">
-                    ห้อง {room.roomNumber}
-                  </h2>
-                  <span
-                    className={`text-xs rounded-full px-2 py-0.5 ${statusBadgeClass(
-                      room.status
-                    )}`}
-                  >
+                  <h2 className="text-lg font-semibold text-rose-700">ห้อง {room.roomNumber}</h2>
+                  <span className={`text-xs rounded-full px-2 py-0.5 ${statusBadgeClass(room.status)}`}>
                     {room.status}
                   </span>
                 </div>
 
                 <p className="mt-1 text-sm">ชั้น: {room.floor}</p>
-                <p className="text-sm">
-                  ค่าเช่า/เดือน: {Number(room.pricePerMonth).toLocaleString()} บาท
-                </p>
-                <p className="text-sm">
-                  ประเภท: {room.cooling === "air" ? "ห้องแอร์" : "ห้องพัดลม"}
-                </p>
+                <p className="text-sm">ค่าเช่า/เดือน: {Number(room.pricePerMonth).toLocaleString()} บาท</p>
+                <p className="text-sm">ประเภท: {room.cooling === "air" ? "ห้องแอร์" : "ห้องพัดลม"}</p>
                 <p className="text-sm">ผู้เช่า: {room.tenantName || "-"}</p>
 
                 <div className="mt-3">
-                  <Link
-                    to={`/rooms/${room.id}`}
-                    className="text-sm rounded-lg border px-3 py-1 hover:bg-gray-50"
-                  >
+                  {/* ลิงก์แบบ relative → /rooms/:roomId */}
+                  <Link to={room.id} className="text-sm rounded-lg border px-3 py-1 hover:bg-gray-50">
                     ดูรายละเอียด
                   </Link>
                 </div>
@@ -136,26 +107,20 @@ export default function Rooms() {
         )}
       </main>
 
-      <AddRoomModal
-        open={openAdd}
-        onClose={() => setOpenAdd(false)}
-        onCreated={() => {}}
-        dormId={dormId}
-      />
+      {/* Modal: เพิ่มห้อง */}
+      <AddRoomModal open={openAdd} onClose={() => setOpenAdd(false)} dormId={dormId || ""} />
     </div>
   );
 }
 
-/* -------------------- Modal: เพิ่มห้อง -------------------- */
+/* -------------------- Modal: เพิ่มห้อง (ฉบับเต็ม) -------------------- */
 function AddRoomModal({
   open,
   onClose,
-  onCreated,
   dormId,
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
   dormId: string;
 }) {
   type FormState = {
@@ -178,35 +143,41 @@ function AddRoomModal({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
+  // ใช้ function declaration เพื่อเลี่ยง JSX generic issue และอ่านง่าย
+  function update<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((s) => ({ ...s, [k]: v }));
+  }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErr("");
 
-    if (!dormId) {
-      setErr("ยังไม่ได้เลือก/สร้างหอพัก");
-      return;
-    }
+    if (!dormId) return setErr("ยังไม่ได้เลือก/สร้างหอพัก");
     if (!form.roomNumber.trim()) return setErr("กรุณากรอกเลขห้อง");
     if (form.pricePerMonth < 0) return setErr("ค่าเช่าต้องเป็นจำนวนบวก");
 
     setSaving(true);
     try {
       await addDoc(collection(db, "dorms", dormId, "rooms"), {
-        roomNumber: form.roomNumber.trim(), // เก็บเป็น string
+        roomNumber: form.roomNumber.trim(), // เก็บเป็น string เพื่อ sort ง่าย
         floor: Number(form.floor),
         pricePerMonth: Number(form.pricePerMonth),
         status: form.status,
         tenantName: form.tenantName.trim() || null,
         cooling: form.cooling,
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      onCreated(); // onSnapshot จะรีเฟรชให้เอง
       onClose();
-      // reset form เล็กน้อย
-      setForm((s) => ({ ...s, roomNumber: "", tenantName: "" }));
+      // reset แบบรวดเร็ว
+      setForm({
+        roomNumber: "",
+        floor: 1,
+        pricePerMonth: 0,
+        status: "vacant",
+        tenantName: "",
+        cooling: "fan",
+      });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -229,9 +200,7 @@ function AddRoomModal({
               type="text"
               className="mt-1 w-full rounded-xl border px-3 py-2"
               value={form.roomNumber}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                update("roomNumber", e.target.value)
-              }
+              onChange={(e) => update("roomNumber", e.target.value)}
               placeholder="เช่น 101"
             />
           </div>
@@ -244,9 +213,7 @@ function AddRoomModal({
                 type="number"
                 className="mt-1 w-full rounded-xl border px-3 py-2"
                 value={form.floor}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  update("floor", Number(e.target.value))
-                }
+                onChange={(e) => update("floor", Number(e.target.value))}
                 min={0}
               />
             </div>
@@ -258,9 +225,7 @@ function AddRoomModal({
                 type="number"
                 className="mt-1 w-full rounded-xl border px-3 py-2"
                 value={form.pricePerMonth}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  update("pricePerMonth", Number(e.target.value))
-                }
+                onChange={(e) => update("pricePerMonth", Number(e.target.value))}
                 min={0}
               />
             </div>
@@ -273,9 +238,7 @@ function AddRoomModal({
               <select
                 className="mt-1 w-full rounded-xl border px-3 py-2"
                 value={form.status}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                  update("status", e.target.value as FormState["status"])
-                }
+                onChange={(e) => update("status", e.target.value as FormState["status"])}
               >
                 <option value="vacant">vacant</option>
                 <option value="occupied">occupied</option>
@@ -289,9 +252,7 @@ function AddRoomModal({
               <select
                 className="mt-1 w-full rounded-xl border px-3 py-2"
                 value={form.cooling}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                  update("cooling", e.target.value as FormState["cooling"])
-                }
+                onChange={(e) => update("cooling", e.target.value as FormState["cooling"])}
               >
                 <option value="fan">ห้องพัดลม</option>
                 <option value="air">ห้องแอร์</option>
@@ -306,9 +267,7 @@ function AddRoomModal({
               type="text"
               className="mt-1 w-full rounded-xl border px-3 py-2"
               value={form.tenantName}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                update("tenantName", e.target.value)
-              }
+              onChange={(e) => update("tenantName", e.target.value)}
               placeholder="สมชาย ใจดี"
             />
           </div>
