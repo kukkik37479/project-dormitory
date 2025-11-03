@@ -30,6 +30,7 @@ const router = createBrowserRouter([
       { path: "d/:dormId", element: <DormPublic /> },
       { path: "repairs",  element: <OwnerRepairs /> },
 
+      // หน้า Bills
       { path: "bills",        element: <Bills /> },
       // { path: "bills/:billId", element: <BillDetail /> },
 
