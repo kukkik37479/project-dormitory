@@ -1,46 +1,77 @@
 // src/router.tsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
-
-import AppLayout   from "./layouts/AppLayout";
-import Homepage    from "./pages/Homepage";
-import Login       from "./pages/Login";
-import Sign        from "./pages/Sign";
-import Rooms       from "./pages/Rooms";
-import RoomDetail  from "./pages/RoomDetail";
-import Explore     from "./pages/Explore";
-import DormPublic  from "./pages/DormPublic";
-import OwnerRepairs from "./pages/OwnerRepairs";
-import Bills       from "./pages/Bills";
-// import BillDetail  from "./pages/BillDetail";
+import AppLayout     from "./layouts/AppLayout";
+import Homepage      from "./pages/Homepage";
+import Login         from "./pages/Login";
+import Sign          from "./pages/Sign";
+import Rooms         from "./pages/Rooms";
+import RoomDetail    from "./pages/RoomDetail";
+import Explore       from "./pages/Explore";
+import DormPublic    from "./pages/DormPublic";
+import OwnerRepairs  from "./pages/OwnerRepairs";
+import Bills         from "./pages/Bills";
+import FurniturePage from "./pages/Furniture";
+import RequireRole   from "./components/RequireRole";
 
 const router = createBrowserRouter([
   { path: "/login", element: <Login /> },
-  { path: "/sign",  element: <Sign  /> },
+  { path: "/sign",  element: <Sign />  },
+  { index: true, element: <Homepage /> },
 
   {
     path: "/",
     element: <AppLayout />,
     children: [
-      { index: true, element: <Homepage /> },
-
-      { path: "rooms",         element: <Rooms /> },
-      { path: "rooms/:roomId", element: <RoomDetail /> },
-
+      // เพจเข้าถึงได้ทั่วไป (หรือภายในระบบแต่ไม่ผูกบทบาท)
       { path: "explore",  element: <Explore /> },
-      { path: "d/:dormId", element: <DormPublic /> },
-      { path: "repairs",  element: <OwnerRepairs /> },
+      { path: "public",   element: <DormPublic /> },
 
-      // หน้า Bills
-      { path: "bills",        element: <Bills /> },
-      // { path: "bills/:billId", element: <BillDetail /> },
+      // --- Owner only ---
+      {
+        path: "rooms",
+        element: (
+          <RequireRole allow={["owner"]}>
+            <Rooms />
+          </RequireRole>
+        ),
+      },
+      {
+        path: "rooms/:roomId",
+        element: (
+          <RequireRole allow={["owner"]}>
+            <RoomDetail />
+          </RequireRole>
+        ),
+      },
+      {
+        path: "repairs",
+        element: (
+          <RequireRole allow={["owner"]}>
+            <OwnerRepairs />
+          </RequireRole>
+        ),
+      },
+      {
+        path: "bills",
+        element: (
+          <RequireRole allow={["owner"]}>
+            <Bills />
+          </RequireRole>
+        ),
+      },
+      {
+        path: "furniture",
+        element: (
+          <RequireRole allow={["owner"]}>
+            <FurniturePage />
+          </RequireRole>
+        ),
+      },
 
-      // 404 ภายใน layout -> กลับไปหน้าหลักของ layout
-      { path: "*", element: <Navigate to="." replace /> },
+      // 404 ภายใน layout -> กลับไปหน้าแรกของ layout
+      { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
-
-  // 404 ระดับ root -> redirect กลับ /
-  { path: "*", element: <Navigate to="/" replace /> },
 ]);
 
 export default router;

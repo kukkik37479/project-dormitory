@@ -61,6 +61,19 @@ const badgeClass = (s: MaintenanceStatus) =>
 
 const fmt = (ts?: Timestamp) => (ts ? ts.toDate().toLocaleDateString("sv-SE") : "-");
 
+/** ใช้ history ถ้ามี เพื่อหา 'สถานะสุดท้ายจริง' (กันกรณี array สลับลำดับด้วยการเลือก at ล่าสุด) */
+function finalStatusOf(t?: Task | null): MaintenanceStatus | undefined {
+  if (!t) return undefined;
+  const h = t.history ?? [];
+  if (h.length === 0) return t.status;
+  const last = h.reduce((acc, cur) => {
+    const a = acc?.at?.toMillis?.() ?? 0;
+    const b = cur?.at?.toMillis?.() ?? 0;
+    return b >= a ? cur : acc;
+  });
+  return last?.status ?? t.status;
+}
+
 /** ====================================================== */
 export default function OwnerRepairs() {
   const { dormId } = useOwnerDormName();
@@ -133,8 +146,7 @@ export default function OwnerRepairs() {
                 });
                 return [...others, ...incoming].sort(
                   (a, b) =>
-                    (b.createdAt?.toMillis?.() ?? 0) -
-                    (a.createdAt?.toMillis?.() ?? 0)
+                    (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)
                 );
               });
             },
@@ -158,7 +170,7 @@ export default function OwnerRepairs() {
       Object.values(taskUnsubs.current).forEach((fn) => fn?.());
       taskUnsubs.current = {};
     };
-  }, [dormId]); // ✅ กันลูป — ไม่ผูกกับ selectedId อีก
+  }, [dormId]);
 
   /** Auto-select รายการแรกเมื่อ tasks เปลี่ยน หรือ selection ไม่ valid */
   useEffect(() => {
@@ -173,7 +185,7 @@ export default function OwnerRepairs() {
     if (!ok) {
       const first = tasks[0];
       setSelectedId(first.id + "@" + first.roomId);
-      setNewStatus(first.status);
+      setNewStatus(finalStatusOf(first) ?? first.status);
       setImageUrl(first.imageUrl || "");
       setNote("");
     }
@@ -185,15 +197,20 @@ export default function OwnerRepairs() {
     [tasks, filter]
   );
 
-  /** task ที่เลือก */
+  /** task ที่เลือก + คำนวณสถานะสุดท้ายและธง isDone */
   const selectedTask = useMemo(() => {
     if (!selectedId) return null;
     const [id, roomId] = selectedId.split("@");
     return tasks.find((t) => t.id === id && t.roomId === roomId) || null;
   }, [selectedId, tasks]);
 
+  const finalStatus = finalStatusOf(selectedTask);
+  const isDone = finalStatus === "done";
+
   async function handleUpdateStatus() {
     if (!dormId || !selectedTask) return;
+    // กันการบันทึกซ้ำเมื่อปิดงานแล้ว
+    if (finalStatusOf(selectedTask) === "done") return;
 
     try {
       const auth = getAuth();
@@ -210,11 +227,11 @@ export default function OwnerRepairs() {
       await updateDoc(ref, {
         status: newStatus,
         imageUrl: imageUrl.trim() || null,
-        updatedAt: serverTimestamp(), // ✅ sentinel ใช้ได้เพราะเป็นฟิลด์ระดับบนสุด
+        updatedAt: serverTimestamp(),
         history: arrayUnion({
           status: newStatus,
           note: note.trim() || null,
-          at: Timestamp.now(),           // ✅ ใช้ Timestamp จริงแทน serverTimestamp()
+          at: Timestamp.now(),
           by: auth.currentUser?.uid ?? null,
         }),
       });
@@ -262,7 +279,7 @@ export default function OwnerRepairs() {
                         <button
                           onClick={() => {
                             setSelectedId(key);
-                            setNewStatus(t.status);
+                            setNewStatus(finalStatusOf(t) ?? t.status);
                             setImageUrl(t.imageUrl || "");
                             setNote("");
                           }}
@@ -282,10 +299,10 @@ export default function OwnerRepairs() {
                           <div className="mt-2">
                             <span
                               className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass(
-                                t.status
+                                finalStatusOf(t) ?? t.status
                               )}`}
                             >
-                              {statusLabel(t.status)}
+                              {statusLabel(finalStatusOf(t) ?? t.status)}
                             </span>
                           </div>
                         </button>
@@ -340,10 +357,10 @@ export default function OwnerRepairs() {
                     <span className="text-gray-600">สถานะปัจจุบัน:</span>
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass(
-                        selectedTask.status
+                        finalStatus ?? selectedTask.status
                       )}`}
                     >
-                      {statusLabel(selectedTask.status)}
+                      {statusLabel(finalStatus ?? selectedTask.status)}
                     </span>
                   </div>
                   {selectedTask.description ? (
@@ -394,6 +411,7 @@ export default function OwnerRepairs() {
                       className="rounded-xl border px-3 py-2"
                       value={newStatus}
                       onChange={(e) => setNewStatus(e.target.value as MaintenanceStatus)}
+                      disabled={isDone}
                     >
                       <option value="open">รอรับเรื่อง</option>
                       <option value="in_progress">กำลังดำเนินการ</option>
@@ -402,33 +420,41 @@ export default function OwnerRepairs() {
                     </select>
                     <input
                       className="rounded-xl border px-3 py-2"
-                      placeholder="หมายเหตุเพิ่มเติม (ลำบี)"
+                      placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
+                      disabled={isDone}
                     />
                   </div>
 
                   <div>
-                    <div className="text-sm text-gray-600">แบบภาพ (ลำบี):</div>
+                    <div className="text-sm text-gray-600">แบบภาพ (ถ้ามี):</div>
                     <input
                       className="mt-1 w-full rounded-xl border px-3 py-2"
                       placeholder="วางลิงก์รูปภาพ (ถ้าจะอัปโหลดจริงค่อยเชื่อม Firebase Storage)"
                       value={imageUrl}
                       onChange={(e) => setImageUrl(e.target.value)}
+                      disabled={isDone}
                     />
                     {imageUrl ? (
                       <img src={imageUrl} className="mt-3 max-h-36 rounded-lg border" alt="preview" />
                     ) : null}
                   </div>
 
-                  <div className="flex justify-end">
-                    <button
-                      onClick={handleUpdateStatus}
-                      className="rounded-xl px-5 py-2.5 bg-rose-500 text-white hover:bg-rose-600"
-                    >
-                      บันทึกการอัปเดต
-                    </button>
-                  </div>
+                  {!isDone ? (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handleUpdateStatus}
+                        className="rounded-xl px-5 py-2.5 bg-rose-500 text-white hover:bg-rose-600"
+                      >
+                        บันทึกการอัปเดต
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500 text-right">
+                      งานนี้ถูกปิดแล้ว (สถานะ: ซ่อมเสร็จแล้ว) — ไม่สามารถอัปเดตต่อได้
+                    </div>
+                  )}
                 </div>
               )}
             </section>
