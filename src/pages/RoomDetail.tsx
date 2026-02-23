@@ -1,9 +1,7 @@
 // src/pages/RoomDetail.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import {
-  doc, onSnapshot, collection, query, orderBy
-} from "firebase/firestore";
+import { doc, onSnapshot, collection, query, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
 
 type Params = { dormId?: string; roomId?: string };
@@ -16,6 +14,9 @@ type Room = {
   status: "vacant" | "occupied" | "maintenance" | string;
   tenantName?: string | null;
   cooling?: "air" | "fan" | string;
+
+  // ✅ เพิ่ม: ตึก (ต้องตรงกับ field ใน Firestore: buildingCode)
+  buildingCode?: string; // เช่น "A"
 };
 
 type Furniture = {
@@ -67,7 +68,12 @@ export default function RoomDetail() {
       (snap) => {
         const rows = snap.docs.map((d) => {
           const data = d.data() as Omit<Furniture, "id">;
-          return { id: d.id, name: data.name, quantity: data.quantity ?? 1, category: (data as any).category };
+          return {
+            id: d.id,
+            name: data.name,
+            quantity: data.quantity ?? 1,
+            category: (data as any).category,
+          };
         });
         setFurniture(rows);
         setLoadingFurniture(false);
@@ -80,9 +86,7 @@ export default function RoomDetail() {
   // ทำสรุปสั้น ๆ แบบ: เตียง 5 ฟุต 1 • ตู้เสื้อผ้า 1
   const furnitureSummary = useMemo(() => {
     if (!furniture.length) return "—";
-    return furniture
-      .map((it) => `${it.name ?? "ไม่ระบุ"} ${Number(it.quantity ?? 1)}`)
-      .join(" • ");
+    return furniture.map((it) => `${it.name ?? "ไม่ระบุ"} ${Number(it.quantity ?? 1)}`).join(" • ");
   }, [furniture]);
 
   if (!roomId) return <div className="p-6">ไม่พบ roomId ในพารามิเตอร์</div>;
@@ -97,8 +101,14 @@ export default function RoomDetail() {
 
       {/* การ์ดรายละเอียดห้อง */}
       <div className="rounded-2xl bg-white p-6 shadow border">
-        <h1 className="text-2xl font-bold mb-2">รายละเอียดห้อง {room.roomNumber}</h1>
+        <h1 className="text-2xl font-bold mb-2">
+          ตึก{room.buildingCode || "-"} ห้อง {room.roomNumber}
+        </h1>
+
+        {/* ✅ เพิ่มบรรทัดโชว์ตึก */}
+        <p>ตึก: {room.buildingCode || "-"}</p>
         <p>ชั้น: {room.floor}</p>
+        <p>ห้อง: {room.roomNumber}</p>
         <p>ค่าเช่า/เดือน: {Number(room.pricePerMonth).toLocaleString()} บาท</p>
         <p>สถานะ: {room.status}</p>
         <p>ประเภท: {room.cooling === "air" ? "ห้องแอร์" : "ห้องพัดลม"}</p>

@@ -357,12 +357,12 @@ export default function FurniturePage() {
             ))}
           </select>
 
-          <input
+          {/* <input
             className="border rounded-lg px-3 py-2 w-64"
             placeholder="ค้นหา: ชื่อ/หมวด/สภาพ/สถานะ/roomId"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-          />
+          /> */}
         </div>
 
         <button

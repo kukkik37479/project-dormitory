@@ -12,6 +12,7 @@ import OwnerRepairs  from "./pages/OwnerRepairs";
 import Bills         from "./pages/Bills";
 import FurniturePage from "./pages/Furniture";
 import RequireRole   from "./components/RequireRole";
+import Tenants       from "./pages/Tenants";
 
 const router = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -64,6 +65,14 @@ const router = createBrowserRouter([
         element: (
           <RequireRole allow={["owner"]}>
             <FurniturePage />
+          </RequireRole>
+        ),
+      },
+      {
+        path: "tenants",
+        element: (
+          <RequireRole allow={["owner"]}>
+            <Tenants />
           </RequireRole>
         ),
       },

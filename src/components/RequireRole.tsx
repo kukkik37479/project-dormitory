@@ -8,11 +8,15 @@ type Props = {
   children: ReactNode;    
 };
 
+function roleHome(role: Role) {
+  return role === "owner" ? "/rooms" : "/public";
+}
+
 export default function RequireRole({ allow, children }: Props) {
   const { role, loading } = useRole();
   const loc = useLocation();
 
-  if (loading) return null; // ใส่ spinner/loader ก็ได้
+  if (loading) return <div className="p-6 text-gray-500">กำลังโหลด...</div>; // ใส่ spinner/loader ก็ได้
 
   // ยังไม่ล็อกอิน
   if (!role) {
@@ -20,8 +24,8 @@ export default function RequireRole({ allow, children }: Props) {
   }
 
   // ล็อกอินแล้วแต่ไม่มีสิทธิ์
-  if (!allow.includes(role)) {
-    return <Navigate to="/" replace />;
+  if (allow.length > 0 && !allow.includes(role)) {
+    return <Navigate to={roleHome(role)} replace />;
   }
 
   return <>{children}</>;
