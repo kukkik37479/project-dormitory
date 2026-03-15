@@ -1,31 +1,49 @@
-// src/components/RequireRole.tsx
+import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useRole, type Role } from "../hooks/userole";
-import { type ReactNode } from "react";
 
-type Props = {
-  allow: Role[];          // ["owner"] หรือ ["tenant"] หรือ ["owner","tenant"]
-  children: ReactNode;    
+type AppRole = "owner" | "tenant" | "admin";
+
+type StoredUser = {
+  id?: string;
+  role?: AppRole;
+  email?: string;
+  username?: string;
+  full_name?: string;
+  dorm_id?: string | null;
+  dorm_slug?: string | null;
 };
 
-function roleHome(role: Role) {
-  return role === "owner" ? "/rooms" : "/public";
-}
+type RequireRoleProps = {
+  allow: AppRole[];
+  children: React.ReactNode;
+};
 
-export default function RequireRole({ allow, children }: Props) {
-  const { role, loading } = useRole();
-  const loc = useLocation();
+export default function RequireRole({
+  allow,
+  children,
+}: RequireRoleProps) {
+  const location = useLocation();
 
-  if (loading) return <div className="p-6 text-gray-500">กำลังโหลด...</div>; // ใส่ spinner/loader ก็ได้
+  let user: StoredUser | null = null;
+  const token =
+    localStorage.getItem("token") || sessionStorage.getItem("token");
 
-  // ยังไม่ล็อกอิน
-  if (!role) {
-    return <Navigate to="/login" replace state={{ from: loc }} />;
+  try {
+    const raw =
+      localStorage.getItem("user") || sessionStorage.getItem("user");
+    user = raw ? JSON.parse(raw) : null;
+  } catch {
+    user = null;
   }
 
-  // ล็อกอินแล้วแต่ไม่มีสิทธิ์
-  if (allow.length > 0 && !allow.includes(role)) {
-    return <Navigate to={roleHome(role)} replace />;
+  if (!token || !user) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  const role = user.role;
+
+  if (!role || !allow.includes(role)) {
+    return <Navigate to="/explore" replace />;
   }
 
   return <>{children}</>;

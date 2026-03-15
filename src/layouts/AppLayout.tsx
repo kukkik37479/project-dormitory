@@ -1,7 +1,5 @@
-import React, { useState } from "react";
-import { Outlet, NavLink } from "react-router-dom";
-import { getAuth } from "firebase/auth";
-
+import React, { useMemo, useState } from "react";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
   FiMenu,
   FiX,
@@ -11,71 +9,92 @@ import {
   FiCreditCard,
   FiPackage,
   FiBox,
+  FiMessageCircle,
+  FiStar,
 } from "react-icons/fi";
 import { GrOverview } from "react-icons/gr";
 import { FaHouseUser } from "react-icons/fa6";
-
-
-import { useRole } from "../hooks/userole";
-import { useOwnerDormName } from "../hooks/useOwnerDormName";
+import { MdOutlineApartment } from "react-icons/md";
 
 import avatarDefault from "../assets/user.png";
 import logoImg from "../assets/logosi.png";
 
+type AppRole = "owner" | "tenant" | "admin";
+
+type StoredUser = {
+  id?: string;
+  role?: AppRole;
+  email?: string;
+  username?: string;
+  full_name?: string;
+  avatar_url?: string | null;
+  dorm_id?: string | null;
+  dorm_slug?: string | null;
+  dorm_name?: string | null;
+  dorm_name_en?: string | null;
+  login_identifier?: string | null;
+};
+
 export default function AppLayout() {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
 
-  const auth = getAuth();
-  const user = auth.currentUser;
+  const storedUser: StoredUser | null = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
 
-  const { role } = useRole();
-  const { name: dormName, loading: dormLoading } = useOwnerDormName();
+  const role = (storedUser?.role || "tenant") as AppRole;
 
-  const avatarSrc = user?.photoURL || avatarDefault;
-  const isOwner = role === "owner";
+  const avatarSrc = storedUser?.avatar_url || avatarDefault;
+  const displayName =
+    storedUser?.full_name ||
+    storedUser?.username ||
+    storedUser?.email?.split("@")[0] ||
+    "-";
+
+  const dormName = storedUser?.dorm_name || "ชื่อหอพัก";
+
+  const sidebarTitle = role === "owner" || role === "tenant" ? dormName : "Roomie";
+  const headerTitle = role === "owner" || role === "tenant" ? dormName : displayName;
 
   return (
     <div className="min-h-screen flex bg-gray-50 font-sans">
-      
       {/* ================= Sidebar (Desktop) ================= */}
-      {isOwner && (
-        <aside className="hidden md:flex md:w-72 md:flex-col bg-white shadow-sm">
-          <Brand isOwner />
-          <Nav role="owner" onNavigate={() => {}} />
-        </aside>
-      )}
+      <aside className="hidden md:flex md:w-72 md:flex-col bg-white shadow-sm">
+        <Brand title={sidebarTitle} onClose={undefined} />
+        <Nav role={role} onNavigate={() => {}} />
+      </aside>
 
       {/* ================= Sidebar (Mobile) ================= */}
-      {isOwner && (
+      <div
+        className={`fixed inset-0 z-40 md:hidden ${
+          open ? "" : "pointer-events-none"
+        }`}
+      >
         <div
-          className={`fixed inset-0 z-40 md:hidden ${
-            open ? "" : "pointer-events-none"
+          className={`absolute inset-0 bg-black/40 transition-opacity ${
+            open ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={() => setOpen(false)}
+        />
+
+        <aside
+          className={`absolute left-0 top-0 h-full w-72 bg-white shadow-2xl transform transition-transform ${
+            open ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          {/* Overlay */}
-          <div
-            className={`absolute inset-0 bg-black/40 transition-opacity ${
-              open ? "opacity-100" : "opacity-0"
-            }`}
-            onClick={() => setOpen(false)}
-          />
-
-          {/* Drawer */}
-          <aside
-            className={`absolute left-0 top-0 h-full w-72 bg-white shadow-2xl transform transition-transform ${
-              open ? "translate-x-0" : "-translate-x-full"
-            }`}
-          >
-            <Brand isOwner onClose={() => setOpen(false)} />
-            <Nav role="owner" onNavigate={() => setOpen(false)} />
-          </aside>
-        </div>
-      )}
+          <Brand title={sidebarTitle} onClose={() => setOpen(false)} />
+          <Nav role={role} onNavigate={() => setOpen(false)} />
+        </aside>
+      </div>
 
       {/* ================= Main ================= */}
       <main className="flex flex-1 flex-col min-w-0">
-
-        {/* ================= Header ================= */}
         <header
           className="
             flex items-center justify-between
@@ -84,47 +103,35 @@ export default function AppLayout() {
             shadow-md
           "
         >
-          {/* Mobile menu button */}
           <div className="flex items-center gap-2">
-            {isOwner && (
-              <button
-                className="p-2 rounded-lg text-white hover:bg-white/20 md:hidden"
-                onClick={() => setOpen(true)}
-              >
-                <FiMenu size={24} />
-              </button>
-            )}
+            <button
+              className="p-2 rounded-lg text-white hover:bg-white/20 md:hidden"
+              onClick={() => setOpen(true)}
+            >
+              <FiMenu size={24} />
+            </button>
           </div>
 
-          {/* User Info */}
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <div className="text-sm font-bold text-white">
-                {isOwner
-                  ? dormLoading
-                    ? "..."
-                    : dormName || "My Dorm"
-                  : null}
-              </div>
-
-              <div className="text-xs text-white/90">
-                {user?.displayName ||
-                  user?.email?.split("@")[0] ||
-                  "-"}
-              </div>
+              <div className="text-sm font-bold text-white">{headerTitle}</div>
+              <div className="text-xs text-white/90">{displayName}</div>
             </div>
 
-            <div className="rounded-full bg-white p-0.5 shadow">
+            <button
+              type="button"
+              className="rounded-full bg-white p-0.5 shadow"
+              onClick={() => navigate("/profile")}
+            >
               <img
                 src={avatarSrc}
                 alt="avatar"
                 className="h-10 w-10 rounded-full object-cover"
               />
-            </div>
+            </button>
           </div>
         </header>
 
-        {/* ================= Content ================= */}
         <div className="overflow-y-auto p-4 md:p-6">
           <Outlet />
         </div>
@@ -133,19 +140,13 @@ export default function AppLayout() {
   );
 }
 
-/* =========================================================
-                        Brand
-========================================================= */
-
 function Brand({
+  title,
   onClose,
-  isOwner,
 }: {
+  title: string;
   onClose?: () => void;
-  isOwner?: boolean;
 }) {
-  const { name, loading } = useOwnerDormName();
-
   return (
     <div className="flex h-24 items-center justify-between px-6">
       <div className="flex items-center gap-4">
@@ -155,13 +156,11 @@ function Brand({
           className="h-16 w-16 object-contain"
         />
 
-        {isOwner && (
-          <div className="flex flex-col">
-            <span className="text-lg font-extrabold leading-tight text-gray-800 line-clamp-2">
-              {loading ? "..." : name || "Dormitory"}
-            </span>
-          </div>
-        )}
+        <div className="flex flex-col">
+          <span className="text-lg font-extrabold leading-tight text-gray-800 line-clamp-2">
+            {title}
+          </span>
+        </div>
       </div>
 
       {onClose && (
@@ -176,15 +175,11 @@ function Brand({
   );
 }
 
-/* =========================================================
-                        Navigation
-========================================================= */
-
 function Nav({
   role,
   onNavigate,
 }: {
-  role: "owner" | "tenant";
+  role: AppRole;
   onNavigate: () => void;
 }) {
   const base =
@@ -195,7 +190,46 @@ function Nav({
       ? "flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-xl bg-[#f43f8c] text-white font-bold shadow-md"
       : base;
 
-  if (role !== "owner") return null;
+  const ownerMenus = [
+    { to: "/explore", label: "หน้าแรก", icon: <FiHome size={22} /> },
+    { to: "/my-dorm", label: "หอของฉัน", icon: <MdOutlineApartment size={22} /> },
+    { to: "/rooms", label: "ห้องพัก", icon: <FiBox size={22} /> },
+    {
+      to: "/announcements",
+      label: "ประกาศและช่องแชท",
+      icon: <FiMessageCircle size={22} />,
+    },
+    { to: "/furniture", label: "เฟอร์นิเจอร์", icon: <FiPackage size={22} /> },
+    { to: "/bills", label: "บิล/ใบแจ้งหนี้", icon: <FiFileText size={22} /> },
+    { to: "/payments", label: "การชำระเงิน", icon: <FiCreditCard size={22} /> },
+    { to: "/repairs", label: "แจ้งซ่อม", icon: <FiTool size={22} /> },
+    { to: "/overview", label: "ภาพรวม", icon: <GrOverview size={22} /> },
+    { to: "/tenants", label: "รายชื่อผู้เช่า", icon: <FaHouseUser size={22} /> },
+    { to: "/reviews", label: "รีวิว", icon: <FiStar size={22} /> },
+  ];
+
+  const tenantMenus = [
+    { to: "/explore", label: "หน้าแรก", icon: <FiHome size={22} /> },
+    { to: "/my-room", label: "ห้องของฉัน", icon: <MdOutlineApartment size={22} /> },
+    {
+      to: "/announcements",
+      label: "ประกาศและช่องแชท",
+      icon: <FiMessageCircle size={22} />,
+    },
+    { to: "/repairs", label: "แจ้งซ่อม", icon: <FiTool size={22} /> },
+    { to: "/bills", label: "บิล/ใบแจ้งหนี้", icon: <FiFileText size={22} /> },
+  ];
+
+  const adminMenus = [
+    { to: "/explore", label: "หน้าแรก", icon: <FiHome size={22} /> },
+  ];
+
+  const menus =
+    role === "owner"
+      ? ownerMenus
+      : role === "tenant"
+      ? tenantMenus
+      : adminMenus;
 
   return (
     <nav className="mt-2 space-y-1 p-2">
@@ -203,45 +237,18 @@ function Nav({
         Menu
       </div>
 
-      <NavLink to="explore" end className={active} onClick={onNavigate}>
-        <FiHome size={22} />
-        หน้าแรก
-      </NavLink>
-
-      <NavLink to="rooms" className={active} onClick={onNavigate}>
-        <FiBox size={22} />
-        ห้องพัก
-      </NavLink>
-
-      <NavLink to="repairs" className={active} onClick={onNavigate}>
-        <FiTool size={22} />
-        แจ้งซ่อม
-      </NavLink>
-
-      <NavLink to="bills" className={active} onClick={onNavigate}>
-        <FiFileText size={22} />
-        บิล/ใบแจ้งหนี้
-      </NavLink>
-
-      <NavLink to="payments" className={active} onClick={onNavigate}>
-        <FiCreditCard size={22} />
-        การชำระเงิน
-      </NavLink>
-
-      <NavLink to="furniture" className={active} onClick={onNavigate}>
-        <FiPackage size={22} />
-        เฟอร์นิเจอร์
-      </NavLink>
-
-      <NavLink to="overview" className={active} onClick={onNavigate}>
-        <GrOverview size={22} />
-        ภาพรวม
-      </NavLink>
-
-      <NavLink to="tenants" className={active} onClick={onNavigate}>
-        <FaHouseUser size={22} />
-        รายชื่อผู้เช่า
-      </NavLink>
+      {menus.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.to === "/explore"}
+          className={active}
+          onClick={onNavigate}
+        >
+          {item.icon}
+          {item.label}
+        </NavLink>
+      ))}
     </nav>
   );
 }
