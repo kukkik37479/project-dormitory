@@ -1,4 +1,4 @@
-import React from "react";
+import React from "react";  
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout";
 import Homepage from "./pages/Homepage";
@@ -14,8 +14,10 @@ import FurniturePage from "./pages/Furniture";
 import RequireRole from "./components/RequireRole";
 import Tenants from "./pages/Tenants";
 import Profile from "./pages/Profile";
+import MyDorm from "./pages/MyDorm";
+import TestMap from "./pages/TestMap";
 
-// หน้า placeholder ชั่วคราว
+
 function TempPage({ title }: { title: string }) {
   return <div className="p-6 text-xl font-semibold">{title}</div>;
 }
@@ -23,20 +25,14 @@ function TempPage({ title }: { title: string }) {
 const router = createBrowserRouter([
   { path: "/login", element: <Login /> },
   { path: "/sign", element: <Sign /> },
-
-  // หน้าแรกก่อนเข้าระบบ
   { path: "/", element: <Homepage /> },
-
   {
     path: "/",
     element: <AppLayout />,
     children: [
       { index: true, element: <Navigate to="/explore" replace /> },
-
-      // -------- Shared / Public in system --------
       { path: "explore", element: <Explore /> },
       { path: "public", element: <DormPublic /> },
-
       {
         path: "profile",
         element: (
@@ -45,13 +41,19 @@ const router = createBrowserRouter([
           </RequireRole>
         ),
       },
-
-      // -------- Owner only --------
+      {
+        path: "test-map",
+        element: (
+          <RequireRole allow={["owner", "tenant", "admin"]}>
+            <TestMap />
+          </RequireRole>
+        ),
+      },
       {
         path: "my-dorm",
         element: (
           <RequireRole allow={["owner"]}>
-            <TempPage title="หอของฉัน" />
+            <MyDorm />
           </RequireRole>
         ),
       },
@@ -111,8 +113,6 @@ const router = createBrowserRouter([
           </RequireRole>
         ),
       },
-
-      // -------- Shared owner + tenant --------
       {
         path: "announcements",
         element: (
@@ -137,8 +137,6 @@ const router = createBrowserRouter([
           </RequireRole>
         ),
       },
-
-      // -------- Tenant only --------
       {
         path: "my-room",
         element: (
@@ -147,7 +145,6 @@ const router = createBrowserRouter([
           </RequireRole>
         ),
       },
-
       { path: "*", element: <Navigate to="/explore" replace /> },
     ],
   },
