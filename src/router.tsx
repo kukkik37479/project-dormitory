@@ -16,7 +16,7 @@ import Tenants from "./pages/Tenants";
 import Profile from "./pages/Profile";
 import MyDorm from "./pages/MyDorm";
 import TestMap from "./pages/TestMap";
-
+import MyRoom from "./pages/MyRoom";
 
 function TempPage({ title }: { title: string }) {
   return <div className="p-6 text-xl font-semibold">{title}</div>;
@@ -141,7 +141,7 @@ const router = createBrowserRouter([
         path: "my-room",
         element: (
           <RequireRole allow={["tenant"]}>
-            <TempPage title="ห้องของฉัน" />
+            <MyRoom />
           </RequireRole>
         ),
       },
