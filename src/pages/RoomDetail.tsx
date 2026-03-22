@@ -34,8 +34,51 @@ type RoomDetailData = {
     rent_amount?: number | string | null;
     deposit_amount?: number | string | null;
     status?: string | null;
+    contract_file_name?: string | null;
+    contract_file_path?: string | null;
+    contract_file_url?: string | null;
+    contract_file_mime_type?: string | null;
+    contract_file_size?: number | null;
   } | null;
 };
+
+function formatFileSize(bytes?: number | null) {
+  if (bytes == null || Number.isNaN(Number(bytes))) return "-";
+
+  const size = Number(bytes);
+
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function getFileExtension(fileName?: string | null, fileUrl?: string | null) {
+  const source = (fileName || fileUrl || "").toLowerCase();
+  const dotIndex = source.lastIndexOf(".");
+  if (dotIndex === -1) return "FILE";
+  return source.slice(dotIndex + 1).toUpperCase();
+}
+
+const API_BASE_URL = "http://localhost:3000";
+
+function getContractHref(
+  fileUrl?: string | null,
+  filePath?: string | null
+) {
+  const raw = (fileUrl || filePath || "").trim();
+
+  if (!raw) return "";
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+
+  if (raw.startsWith("/")) {
+    return `${API_BASE_URL}${raw}`;
+  }
+
+  return `${API_BASE_URL}/${raw}`;
+}
 
 export default function RoomDetail() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -81,6 +124,11 @@ export default function RoomDetail() {
 
   const room = data.room;
 
+  const contractHref = getContractHref(
+  data?.latest_contract?.contract_file_url,
+  data?.latest_contract?.contract_file_path
+);  
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <Link to="/rooms" className="inline-block text-rose-600 underline">
@@ -107,23 +155,55 @@ export default function RoomDetail() {
         <h2 className="text-xl font-semibold mb-3">สัญญาล่าสุด</h2>
 
         {data.latest_contract ? (
-          <div className="space-y-1 text-sm">
-            <p>เลขสัญญา: {data.latest_contract.contract_number || "-"}</p>
-            <p>สถานะ: {data.latest_contract.status || "-"}</p>
-            <p>เริ่มสัญญา: {data.latest_contract.start_date || "-"}</p>
-            <p>สิ้นสุดสัญญา: {data.latest_contract.end_date || "-"}</p>
-            <p>
-              ค่าเช่า:{" "}
-              {data.latest_contract.rent_amount == null
-                ? "-"
-                : `${Number(data.latest_contract.rent_amount).toLocaleString()} บาท`}
-            </p>
-            <p>
-              เงินประกัน:{" "}
-              {data.latest_contract.deposit_amount == null
-                ? "-"
-                : `${Number(data.latest_contract.deposit_amount).toLocaleString()} บาท`}
-            </p>
+          <div className="space-y-4 text-sm">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="mb-3 font-semibold text-gray-900">ไฟล์สัญญาเช่า</div>
+
+              {contractHref ? (
+                <a
+                  href={contractHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 transition hover:border-pink-300 hover:shadow-sm"
+                >
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-9 w-9 text-red-500"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" />
+                      <path d="M14 2v5h5" />
+                      <path d="M9 13h6" />
+                      <path d="M9 17h6" />
+                      <path d="M10 9h1" />
+                    </svg>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xl font-bold text-slate-900">
+                      {data.latest_contract?.contract_file_name || "ไฟล์สัญญาเช่า"}
+                    </div>
+
+                    <div className="mt-1 text-sm text-gray-500">
+                      {getFileExtension(
+                        data.latest_contract?.contract_file_name,
+                        contractHref
+                      )}
+                      {data.latest_contract?.contract_file_size != null
+                        ? ` • ${formatFileSize(data.latest_contract.contract_file_size)}`
+                        : ""}
+                    </div>
+                  </div>
+                </a>
+              ) : (
+                <div className="text-gray-500">ยังไม่มีไฟล์สัญญาเช่า</div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="text-sm text-gray-500">ยังไม่มีข้อมูลสัญญา</div>
