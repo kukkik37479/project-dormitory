@@ -195,7 +195,7 @@ function Nav({
     { to: "/my-dorm", label: "หอของฉัน", icon: <MdOutlineApartment size={22} /> },
     { to: "/rooms", label: "ห้องพัก", icon: <FiBox size={22} /> },
     {
-      to: "/announcements",
+      to: "/announcements-chat",
       label: "ประกาศและช่องแชท",
       icon: <FiMessageCircle size={22} />,
     },
@@ -212,7 +212,7 @@ function Nav({
     { to: "/explore", label: "หน้าแรก", icon: <FiHome size={22} /> },
     { to: "/my-room", label: "ห้องของฉัน", icon: <MdOutlineApartment size={22} /> },
     {
-      to: "/announcements",
+      to: "/announcements-chat",
       label: "ประกาศและช่องแชท",
       icon: <FiMessageCircle size={22} />,
     },

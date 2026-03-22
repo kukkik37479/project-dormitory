@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import MyDorm from "./pages/MyDorm";
 import TestMap from "./pages/TestMap";
 import MyRoom from "./pages/MyRoom";
+import AnnouncementsChat from "./pages/AnnouncementsChat";
 
 function TempPage({ title }: { title: string }) {
   return <div className="p-6 text-xl font-semibold">{title}</div>;
@@ -48,6 +49,10 @@ const router = createBrowserRouter([
             <TestMap />
           </RequireRole>
         ),
+      },
+      {
+        path: "announcements-chat",
+        element: <AnnouncementsChat />,
       },
       {
         path: "my-dorm",
