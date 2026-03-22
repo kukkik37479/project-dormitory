@@ -39,8 +39,11 @@ type TenantListResponse = {
 function getAccessToken() {
   return (
     localStorage.getItem("token") ||
+    sessionStorage.getItem("token") ||
     localStorage.getItem("accessToken") ||
+    sessionStorage.getItem("accessToken") ||
     localStorage.getItem("authToken") ||
+    sessionStorage.getItem("authToken") ||
     ""
   );
 }
@@ -86,6 +89,19 @@ function TrashIcon() {
   );
 }
 
+function formatRoomLabel(tenant: TenantItem) {
+  const building =
+    tenant.building_code ||
+    tenant.building_name ||
+    "-";
+
+  const room = tenant.room_number || "-";
+
+  if (building === "-" && room === "-") return "-";
+  if (building !== "-" && room !== "-") return `${building} / ${room}`;
+  return building !== "-" ? building : room;
+}
+
 export default function Tenants() {
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +110,7 @@ export default function Tenants() {
   const [openAddTenant, setOpenAddTenant] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [endingId, setEndingId] = useState<string | null>(null);
-
+  const [uploadingContractId, setUploadingContractId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [meta, setMeta] = useState({
@@ -169,6 +185,31 @@ export default function Tenants() {
       setEndingId(null);
     }
   }
+  async function handleUploadContractFile(
+    contractId: string | null,
+    file: File | null
+  ) {
+    if (!contractId || !file) return;
+
+    try {
+      setUploadingContractId(contractId);
+
+      const body = new FormData();
+      body.append("contract_file", file);
+
+      await apiFetch(`/api/contracts/${contractId}/file`, {
+        method: "PATCH",
+        body,
+      });
+
+      setRefreshKey((n) => n + 1);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "อัปโหลดไฟล์ไม่สำเร็จ");
+    } finally {
+      setUploadingContractId(null);
+    }
+  }
+
 
   return (
   <div className="min-h-screen bg-[#F9F9F9] px-6 py-8">
@@ -179,10 +220,12 @@ export default function Tenants() {
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
               <path d="M16 11c1.66 0 2.99-1.57 2.99-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 2.99-1.57 2.99-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.96 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z" />
             </svg>
-            <span className="text-[28px] font-bold">ผู้เข้าพักทั้งหมด</span>
-            <span className="ml-3 text-sm font-medium text-pink-500">
-              จำนวนผู้เช่าที่มี
-            </span>
+            <div className="flex items-baseline gap-3">
+              <span className="text-[28px] font-bold">ผู้เช่าทั้งหมด</span>
+              <span className="text-sm font-medium text-pink-500">
+                จำนวน <span className="text-[20px] font-bold">{tenantCount}</span> คน
+              </span>
+            </div>
           </div>
         </div>
 
@@ -250,6 +293,7 @@ export default function Tenants() {
                 <tbody>
                   {tenants.map((tenant, index) => {
                     const fileUrl = toAbsoluteFileUrl(tenant.contract_file_path);
+                    const roomLabel = `${tenant.building_code || tenant.building_name || "-"} / ${tenant.room_number || "-"}`;
 
                     return (
                       <tr
@@ -257,7 +301,7 @@ export default function Tenants() {
                         className="border-t border-[#ead6de]"
                       >
                         <td className="bg-white px-4 py-4 font-semibold text-[#222]">
-                          {tenant.room_number || "-"}
+                          {roomLabel}
                         </td>
 
                         <td className="bg-[#f8e3ea] px-4 py-4 text-[#222]">
@@ -282,15 +326,32 @@ export default function Tenants() {
                         </td>
 
                         <td className="bg-[#f8e3ea] px-4 py-4">
-                          <button
-                            type="button"
-                            onClick={() => handleEndContract(tenant.contract_id)}
-                            disabled={!tenant.contract_id || endingId === tenant.contract_id}
-                            className="inline-flex items-center justify-center text-[#c91c23] disabled:opacity-40"
-                            title="จบสัญญา"
-                          >
-                            <TrashIcon />
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            <label className="cursor-pointer rounded bg-[#4da3ff] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
+                              {uploadingContractId === tenant.contract_id ? "กำลังอัป..." : "อัปไฟล์"}
+                              <input
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  handleUploadContractFile(tenant.contract_id, file);
+                                  e.currentTarget.value = "";
+                                }}
+                                disabled={!tenant.contract_id || uploadingContractId === tenant.contract_id}
+                              />
+                            </label>
+
+                            <button
+                              type="button"
+                              onClick={() => handleEndContract(tenant.contract_id)}
+                              disabled={!tenant.contract_id || endingId === tenant.contract_id}
+                              className="inline-flex items-center justify-center rounded bg-[#ffe5e8] px-3 py-1.5 text-[#c91c23] disabled:opacity-40"
+                              title="จบสัญญา"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

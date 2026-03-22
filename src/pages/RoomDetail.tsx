@@ -1,97 +1,85 @@
-// src/pages/RoomDetail.tsx
 import { useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { doc, onSnapshot, collection, query, orderBy } from "firebase/firestore";
-import { db } from "../firebase";
+import { Link, useParams } from "react-router-dom";
+import { getRoomDetail } from "../service/rooms.service";
 
-type Params = { dormId?: string; roomId?: string };
-
-type Room = {
-  id: string;
-  roomNumber: string;
-  floor: number;
-  pricePerMonth: number;
-  status: "vacant" | "occupied" | "maintenance" | string;
-  tenantName?: string | null;
-  cooling?: "air" | "fan" | string;
-
-  // ✅ เพิ่ม: ตึก (ต้องตรงกับ field ใน Firestore: buildingCode)
-  buildingCode?: string; // เช่น "A"
-};
-
-type Furniture = {
-  id: string;
-  name: string;
-  quantity?: number;
-  category?: string;
+type RoomDetailData = {
+  room: {
+    id: string;
+    room_number: string;
+    floor_no: number | string;
+    monthly_rent: number | string;
+    status: string;
+    tenant_name?: string | null;
+    room_type?: string | null;
+    note?: string | null;
+    building_code?: string | null;
+    building_display_name?: string | null;
+  };
+  furniture_items: {
+    id: string;
+    item_name: string;
+    quantity?: number;
+    note?: string | null;
+    brand?: string | null;
+    model?: string | null;
+    color?: string | null;
+    size_detail?: string | null;
+    condition_status?: string | null;
+  }[];
+  latest_contract?: {
+    id: string;
+    contract_number?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    rent_amount?: number | string | null;
+    deposit_amount?: number | string | null;
+    status?: string | null;
+  } | null;
 };
 
 export default function RoomDetail() {
-  const { dormId: dormIdParam, roomId } = useParams<Params>();
+  const { roomId } = useParams<{ roomId: string }>();
 
-  // ใช้ dormId จากพารามิเตอร์ถ้ามี ไม่งั้นใช้ที่เก็บไว้ใน localStorage
-  const dormId = dormIdParam ?? localStorage.getItem("currentDormId") ?? "dormId";
+  const [data, setData] = useState<RoomDetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [room, setRoom] = useState<Room | null>(null);
-  const [loadingRoom, setLoadingRoom] = useState(true);
-
-  const [furniture, setFurniture] = useState<Furniture[]>([]);
-  const [loadingFurniture, setLoadingFurniture] = useState(true);
-
-  // ----- โหลดข้อมูลห้องแบบเรียลไทม์ -----
   useEffect(() => {
-    if (!roomId) return;
-    const ref = doc(db, "dorms", dormId, "rooms", roomId);
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        if (!snap.exists()) {
-          setRoom(null);
-        } else {
-          setRoom({ id: snap.id, ...(snap.data() as Omit<Room, "id">) });
-        }
-        setLoadingRoom(false);
-      },
-      () => setLoadingRoom(false)
-    );
-    return () => unsub();
-  }, [dormId, roomId]);
+    const load = async () => {
+      if (!roomId) return;
 
-  // ----- โหลดรายการเฟอร์นิเจอร์ของห้องแบบเรียลไทม์ -----
-  useEffect(() => {
-    if (!roomId) return;
-    setLoadingFurniture(true);
-    const col = collection(db, "dorms", dormId, "rooms", roomId, "furniture");
-    const q = query(col, orderBy("name", "asc"));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const rows = snap.docs.map((d) => {
-          const data = d.data() as Omit<Furniture, "id">;
-          return {
-            id: d.id,
-            name: data.name,
-            quantity: data.quantity ?? 1,
-            category: (data as any).category,
-          };
-        });
-        setFurniture(rows);
-        setLoadingFurniture(false);
-      },
-      () => setLoadingFurniture(false)
-    );
-    return () => unsub();
-  }, [dormId, roomId]);
+      try {
+        setLoading(true);
+        setError("");
 
-  // ทำสรุปสั้น ๆ แบบ: เตียง 5 ฟุต 1 • ตู้เสื้อผ้า 1
+        const result = await getRoomDetail(roomId);
+        setData(result);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "โหลดรายละเอียดห้องไม่สำเร็จ"
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [roomId]);
+
   const furnitureSummary = useMemo(() => {
-    if (!furniture.length) return "—";
-    return furniture.map((it) => `${it.name ?? "ไม่ระบุ"} ${Number(it.quantity ?? 1)}`).join(" • ");
-  }, [furniture]);
+    if (!data?.furniture_items?.length) return "—";
 
-  if (!roomId) return <div className="p-6">ไม่พบ roomId ในพารามิเตอร์</div>;
-  if (loadingRoom) return <div className="p-6">กำลังโหลด...</div>;
-  if (!room) return <div className="p-6">ไม่พบห้อง</div>;
+    return data.furniture_items
+      .map((it) => `${it.item_name ?? "ไม่ระบุ"} ${Number(it.quantity ?? 1)}`)
+      .join(" • ");
+  }, [data]);
+
+  if (!roomId) return <div className="p-6">ไม่พบ roomId</div>;
+  if (loading) return <div className="p-6">กำลังโหลด...</div>;
+  if (error) return <div className="p-6 text-rose-600">{error}</div>;
+  if (!data?.room) return <div className="p-6">ไม่พบห้อง</div>;
+
+  const room = data.room;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -99,44 +87,79 @@ export default function RoomDetail() {
         ← กลับ
       </Link>
 
-      {/* การ์ดรายละเอียดห้อง */}
       <div className="rounded-2xl bg-white p-6 shadow border">
         <h1 className="text-2xl font-bold mb-2">
-          ตึก{room.buildingCode || "-"} ห้อง {room.roomNumber}
+          {room.building_display_name || `ตึก ${room.building_code || "-"}`} ห้อง{" "}
+          {room.room_number}
         </h1>
 
-        {/* ✅ เพิ่มบรรทัดโชว์ตึก */}
-        <p>ตึก: {room.buildingCode || "-"}</p>
-        <p>ชั้น: {room.floor}</p>
-        <p>ห้อง: {room.roomNumber}</p>
-        <p>ค่าเช่า/เดือน: {Number(room.pricePerMonth).toLocaleString()} บาท</p>
+        <p>ตึก: {room.building_display_name || room.building_code || "-"}</p>
+        <p>ชั้น: {room.floor_no}</p>
+        <p>ห้อง: {room.room_number}</p>
+        <p>ค่าเช่า/เดือน: {Number(room.monthly_rent).toLocaleString()} บาท</p>
         <p>สถานะ: {room.status}</p>
-        <p>ประเภท: {room.cooling === "air" ? "ห้องแอร์" : "ห้องพัดลม"}</p>
-        <p>ผู้เช่า: {room.tenantName || "-"}</p>
+        <p>ประเภท: {room.room_type || "-"}</p>
+        <p>ผู้เช่า: {room.tenant_name || "-"}</p>
+        <p>หมายเหตุ: {room.note || "-"}</p>
       </div>
 
-      {/* การ์ดแสดงเฟอร์นิเจอร์ของห้องนี้ */}
+      <div className="rounded-2xl bg-white p-6 shadow border">
+        <h2 className="text-xl font-semibold mb-3">สัญญาล่าสุด</h2>
+
+        {data.latest_contract ? (
+          <div className="space-y-1 text-sm">
+            <p>เลขสัญญา: {data.latest_contract.contract_number || "-"}</p>
+            <p>สถานะ: {data.latest_contract.status || "-"}</p>
+            <p>เริ่มสัญญา: {data.latest_contract.start_date || "-"}</p>
+            <p>สิ้นสุดสัญญา: {data.latest_contract.end_date || "-"}</p>
+            <p>
+              ค่าเช่า:{" "}
+              {data.latest_contract.rent_amount == null
+                ? "-"
+                : `${Number(data.latest_contract.rent_amount).toLocaleString()} บาท`}
+            </p>
+            <p>
+              เงินประกัน:{" "}
+              {data.latest_contract.deposit_amount == null
+                ? "-"
+                : `${Number(data.latest_contract.deposit_amount).toLocaleString()} บาท`}
+            </p>
+          </div>
+        ) : (
+          <div className="text-sm text-gray-500">ยังไม่มีข้อมูลสัญญา</div>
+        )}
+      </div>
+
       <div className="rounded-2xl bg-white p-6 shadow border">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-semibold">เฟอร์นิเจอร์ในห้องนี้</h2>
         </div>
 
-        {loadingFurniture ? (
-          <div className="text-sm text-gray-500">กำลังโหลดรายการเฟอร์นิเจอร์...</div>
-        ) : furniture.length === 0 ? (
+        {!data.furniture_items?.length ? (
           <div className="text-sm text-gray-500">ยังไม่มีรายการเฟอร์นิเจอร์</div>
         ) : (
           <>
-            {/* สรุปแบบบรรทัดเดียว */}
             <div className="mb-3 text-sm">
               <span className="font-medium">สรุป:</span> {furnitureSummary}
             </div>
 
-            {/* ลิสต์ทีละรายการ */}
-            <ul className="list-disc pl-5 space-y-1">
-              {furniture.map((it) => (
+            <ul className="list-disc pl-5 space-y-2">
+              {data.furniture_items.map((it) => (
                 <li key={it.id} className="text-sm">
-                  {it.name} {Number(it.quantity ?? 1)}
+                  <div>
+                    {it.item_name} {Number(it.quantity ?? 1)}
+                  </div>
+                  {(it.brand || it.model || it.color || it.size_detail) && (
+                    <div className="text-gray-500">
+                      {[it.brand, it.model, it.color, it.size_detail]
+                        .filter(Boolean)
+                        .join(" • ")}
+                    </div>
+                  )}
+                  {it.condition_status && (
+                    <div className="text-gray-500">สภาพ: {it.condition_status}</div>
+                  )}
+                  {it.note && <div className="text-gray-500">หมายเหตุ: {it.note}</div>}
                 </li>
               ))}
             </ul>

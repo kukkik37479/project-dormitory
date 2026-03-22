@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { getVacantRooms } from "../service/rooms.service";
 import {
   MapContainer,
   Marker,
@@ -129,6 +130,19 @@ type MapPickerProps = {
   latitude: string;
   longitude: string;
   onPick: (lat: number, lng: number) => void;
+};
+
+type VacantRoomItem = {
+  id: string;
+  room_number: string;
+  floor_no: number | string;
+  monthly_rent: number | string;
+  room_type: string;
+  status: string;
+  building_code?: string | null;
+  building_display_name?: string | null;
+  size_sqm?: number | string | null;
+  room_layout?: string | null;
 };
 
 const initialForm: DormForm = {
@@ -325,6 +339,13 @@ function normalizeImages(images?: ImageItem[]) {
   }));
 }
 
+function getRoomStatusLabel(status: string) {
+  if (status === "vacant") return "ว่าง";
+  if (status === "occupied") return "มีผู้เช่า";
+  if (status === "maintenance") return "ซ่อมบำรุง";
+  return status || "-";
+}
+
 export default function MyDorm() {
   const token =
     localStorage.getItem("token") || sessionStorage.getItem("token");
@@ -334,6 +355,8 @@ export default function MyDorm() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [vacantRooms, setVacantRooms] = useState<VacantRoomItem[]>([]);
+  const [loadingVacantRooms, setLoadingVacantRooms] = useState(false);
 
   const [form, setForm] = useState<DormForm>(initialForm);
   const [amenities, setAmenities] = useState<AmenityValue[]>([]);
@@ -496,6 +519,24 @@ export default function MyDorm() {
       announcements,
     });
   }, [amenities, roomTypes, phones, images, announcements, loading]);
+
+  useEffect(() => {
+  const loadVacantRooms = async () => {
+    try {
+      setLoadingVacantRooms(true);
+      const data = await getVacantRooms();
+      setVacantRooms(data.rooms || []);
+    } catch (err) {
+      console.error("loadVacantRooms error:", err);
+      setVacantRooms([]);
+    } finally {
+      setLoadingVacantRooms(false);
+    }
+  };
+
+  if (!token) return;
+  loadVacantRooms();
+}, [token]);
 
   const handleFormChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -1284,191 +1325,157 @@ export default function MyDorm() {
                 <h2 className="text-xl font-extrabold text-gray-900">
                   ประกาศห้องว่าง
                 </h2>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAnnouncements((prev) => [
-                      ...prev,
-                      {
-                        ...emptyAnnouncement,
-                        room_no: `ห้องใหม่ ${prev.length + 1}`,
-                      },
-                    ])
-                  }
-                  className="rounded-xl bg-[#ff4f8b] px-5 py-2.5 font-semibold text-white shadow hover:opacity-95"
-                >
-                  เพิ่มประกาศ
-                </button>
-              </div>
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {announcements.map((item, index) => (
-                  <div
-                    key={index}
-                    className="rounded-2xl border border-gray-200 bg-[#fcfcfd] p-5"
-                  >
-                    <div className="mb-4 flex items-center justify-between">
-                      <div className="font-bold text-gray-900">
-                        รายการประกาศ {index + 1}
-                      </div>
-                      {announcements.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAnnouncements((prev) =>
-                              prev.filter((_, i) => i !== index)
-                            )
-                          }
-                          className="rounded-xl bg-[#ef4444] px-4 py-2 text-sm font-semibold text-white"
-                        >
-                          ลบ
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-700">
-                          ห้องพัก
-                        </label>
-                        <input
-                          name="room_no"
-                          value={item.room_no}
-                          onChange={(e) => handleAnnouncementChange(index, e)}
-                          className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none focus:ring-2 focus:ring-pink-300"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-700">
-                          ประเภทห้อง
-                        </label>
-                        <input
-                          name="room_type"
-                          value={item.room_type}
-                          onChange={(e) => handleAnnouncementChange(index, e)}
-                          className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none focus:ring-2 focus:ring-pink-300"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-700">
-                          ชั้น
-                        </label>
-                        <input
-                          name="floor"
-                          value={item.floor}
-                          onChange={(e) => handleAnnouncementChange(index, e)}
-                          className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none focus:ring-2 focus:ring-pink-300"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-700">
-                          อาคาร
-                        </label>
-                        <input
-                          name="building"
-                          value={item.building}
-                          onChange={(e) => handleAnnouncementChange(index, e)}
-                          className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none focus:ring-2 focus:ring-pink-300"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-700">
-                          ขนาดห้อง (ตร.ม.)
-                        </label>
-                        <input
-                          name="size_sqm"
-                          value={item.size_sqm}
-                          onChange={(e) => handleAnnouncementChange(index, e)}
-                          className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none focus:ring-2 focus:ring-pink-300"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-700">
-                          ราคา / เดือน
-                        </label>
-                        <input
-                          name="price"
-                          value={item.price}
-                          onChange={(e) => handleAnnouncementChange(index, e)}
-                          className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none focus:ring-2 focus:ring-pink-300"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="mb-2 block text-sm font-semibold text-gray-700">
-                          สถานะ
-                        </label>
-                        <select
-                          name="status"
-                          value={item.status}
-                          onChange={(e) => handleAnnouncementChange(index, e)}
-                          className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none focus:ring-2 focus:ring-pink-300"
-                        >
-                          <option value="available">ว่าง</option>
-                          <option value="reserved">จองแล้ว</option>
-                          <option value="hidden">ซ่อน</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-white">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-[#f8f8fb] text-left text-gray-700">
-                      <tr>
-                        <th className="px-4 py-4 font-semibold">ห้องพัก</th>
-                        <th className="px-4 py-4 font-semibold">ประเภทห้อง</th>
-                        <th className="px-4 py-4 font-semibold">อาคาร / ชั้น</th>
-                        <th className="px-4 py-4 font-semibold">ราคา / เดือน</th>
-                        <th className="px-4 py-4 font-semibold">สถานะ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {visibleAnnouncements.map((item, index) => (
-                        <tr key={`${item.room_no}-${index}`}>
-                          <td className="px-4 py-4 font-semibold text-gray-900">
-                            {item.room_no}
-                          </td>
-                          <td className="px-4 py-4 text-gray-700">
-                            {item.room_type}
-                          </td>
-                          <td className="px-4 py-4 text-gray-700">
-                            {item.building} / ชั้น {item.floor}
-                          </td>
-                          <td className="px-4 py-4 text-gray-700">
-                            ฿{formatMoney(item.price)}
-                          </td>
-                          <td className="px-4 py-4">
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                                item.status === "available"
-                                  ? "bg-green-100 text-green-700"
-                                  : item.status === "reserved"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-gray-200 text-gray-600"
-                              }`}
-                            >
-                              {item.status === "available"
-                                ? "ว่าง"
-                                : item.status === "reserved"
-                                ? "จองแล้ว"
-                                : "ซ่อน"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="rounded-xl bg-[#fff1f6] px-4 py-2 text-sm font-semibold text-[#ff4f8b]">
+                  ดึงจากห้องที่สถานะเป็น “vacant”
                 </div>
               </div>
+
+              {loadingVacantRooms ? (
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
+                  กำลังโหลดรายการห้องว่าง...
+                </div>
+              ) : vacantRooms.length === 0 ? (
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
+                  ยังไม่มีห้องว่างในระบบ
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    {vacantRooms.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="rounded-2xl border border-gray-200 bg-[#fcfcfd] p-5"
+                      >
+                        <div className="mb-4 flex items-center justify-between">
+                          <div className="font-bold text-gray-900">
+                            รายการประกาศ {index + 1}
+                          </div>
+                          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                            {getRoomStatusLabel(item.status)}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold text-gray-700">
+                              ห้องพัก
+                            </label>
+                            <input
+                              value={item.room_number || ""}
+                              readOnly
+                              className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold text-gray-700">
+                              ประเภทห้อง
+                            </label>
+                            <input
+                              value={item.room_type || ""}
+                              readOnly
+                              className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold text-gray-700">
+                              ชั้น
+                            </label>
+                            <input
+                              value={String(item.floor_no ?? "")}
+                              readOnly
+                              className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold text-gray-700">
+                              อาคาร
+                            </label>
+                            <input
+                              value={
+                                item.building_display_name ||
+                                (item.building_code ? `อาคาร ${item.building_code}` : "")
+                              }
+                              readOnly
+                              className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold text-gray-700">
+                              ขนาดห้อง (ตร.ม.)
+                            </label>
+                            <input
+                              value={
+                                item.size_sqm == null || item.size_sqm === ""
+                                  ? "-"
+                                  : String(item.size_sqm)
+                              }
+                              readOnly
+                              className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold text-gray-700">
+                              ราคา / เดือน
+                            </label>
+                            <input
+                              value={String(item.monthly_rent ?? 0)}
+                              readOnly
+                              className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-white">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-[#f8f8fb] text-left text-gray-700">
+                          <tr>
+                            <th className="px-4 py-4 font-semibold">ห้องพัก</th>
+                            <th className="px-4 py-4 font-semibold">ประเภทห้อง</th>
+                            <th className="px-4 py-4 font-semibold">อาคาร / ชั้น</th>
+                            <th className="px-4 py-4 font-semibold">ราคา / เดือน</th>
+                            <th className="px-4 py-4 font-semibold">สถานะ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {vacantRooms.map((item) => (
+                            <tr key={item.id}>
+                              <td className="px-4 py-4 font-semibold text-gray-900">
+                                {item.room_number}
+                              </td>
+                              <td className="px-4 py-4 text-gray-700">
+                                {item.room_type || "-"}
+                              </td>
+                              <td className="px-4 py-4 text-gray-700">
+                                {item.building_display_name ||
+                                  (item.building_code ? `อาคาร ${item.building_code}` : "-")}{" "}
+                                / ชั้น {item.floor_no ?? "-"}
+                              </td>
+                              <td className="px-4 py-4 text-gray-700">
+                                ฿{formatMoney(String(item.monthly_rent ?? 0))}
+                              </td>
+                              <td className="px-4 py-4">
+                                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                                  {getRoomStatusLabel(item.status)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
