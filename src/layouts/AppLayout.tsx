@@ -16,7 +16,7 @@ import { GrOverview } from "react-icons/gr";
 import { FaHouseUser } from "react-icons/fa6";
 import { MdOutlineApartment } from "react-icons/md";
 
-import avatarDefault from "../assets/user.png";
+import { getAvatarByRoleAndGender } from "../utils/roleAvatar";
 import logoImg from "../assets/logosi.png";
 
 type AppRole = "owner" | "tenant" | "admin";
@@ -33,6 +33,7 @@ type StoredUser = {
   dorm_name?: string | null;
   dorm_name_en?: string | null;
   login_identifier?: string | null;
+  gender?: string | null;
 };
 
 export default function AppLayout() {
@@ -50,7 +51,10 @@ export default function AppLayout() {
 
   const role = (storedUser?.role || "tenant") as AppRole;
 
-  const avatarSrc = storedUser?.avatar_url || avatarDefault;
+  const avatarSrc = getAvatarByRoleAndGender({
+  role: storedUser?.role,
+  gender: storedUser?.gender,
+});
   const displayName =
     storedUser?.full_name ||
     storedUser?.username ||

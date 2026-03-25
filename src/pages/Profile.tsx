@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import avatarDefault from "../assets/user.png";
+import { getAvatarByRoleAndGender } from "../utils/roleAvatar";
 
 const API_BASE_URL = "http://localhost:3000";
 
@@ -22,6 +22,12 @@ type StoredUser = {
   prefix?: string | null;
   gender?: string | null;
   birth_date?: string | null;
+  room_id?: string | null;
+  room_number?: string | null;
+  room_name?: string | null;
+  building_id?: string | null;
+  building_code?: string | null;
+  building_name?: string | null;
 };
 
 type ProfileForm = {
@@ -150,12 +156,19 @@ export default function Profile() {
   }, [token]);
 
   const role = user?.role || "tenant";
-  const avatarSrc = avatarDefault;
+
+  const avatarSrc = getAvatarByRoleAndGender({
+    role,
+    gender: profileForm.gender || user?.gender || storageUser?.gender,
+  });
 
   const displayName = profileForm.full_name || user?.full_name || "ชื่อผู้ใช้";
   const dormName = user?.dorm_name || "ชื่อหอพัก";
   const roleLabel = getRoleLabel(role);
-  const roomLabel = role === "tenant" ? "ห้องที่ผู้เช่าอยู่" : "-";
+  const roomLabel =
+    role === "tenant"
+      ? `${user?.building_code || user?.building_name || "-"} / ${user?.room_number || "-"}`
+      : "-";
   const registerDate = formatThaiDate(user?.created_at);
 
   const handleProfileChange = (
