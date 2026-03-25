@@ -1,4 +1,3 @@
-// import React from "react";  
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout";
 import Homepage from "./pages/Homepage";
@@ -11,6 +10,7 @@ import DormPublic from "./pages/DormPublic";
 import OwnerRepairs from "./pages/OwnerRepairs";
 import Bills from "./pages/Bills";
 import FurniturePage from "./pages/Furniture";
+import FurnitureRoomDetail from "./pages/FurnitureRoomDetail";
 import RequireRole from "./components/RequireRole";
 import Tenants from "./pages/Tenants";
 import Profile from "./pages/Profile";
@@ -83,6 +83,14 @@ const router = createBrowserRouter([
         element: (
           <RequireRole allow={["owner"]}>
             <FurniturePage />
+          </RequireRole>
+        ),
+      },
+      {
+        path: "furniture/:roomId",
+        element: (
+          <RequireRole allow={["owner"]}>
+            <FurnitureRoomDetail />
           </RequireRole>
         ),
       },
