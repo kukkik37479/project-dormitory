@@ -82,6 +82,16 @@ function getUsageBadgeClass(value: FurnitureItem["usageStatus"]) {
   }
 }
 
+function getRemainingMonthsText(item: FurnitureItem) {
+  if (item.lifespanMonths === null || item.lifespanMonths === undefined) {
+    return "-";
+  }
+
+  const used = item.monthsUsed ?? 0;
+  const remaining = Math.max(0, item.lifespanMonths - used);
+  return `${remaining} เดือน`;
+}
+
 export default function FurnitureRoomDetail() {
   const { roomId = "" } = useParams();
   const navigate = useNavigate();
@@ -94,6 +104,8 @@ export default function FurnitureRoomDetail() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [selectedItem, setSelectedItem] = useState<FurnitureItem | null>(null);
+
+  const [expandedItemIds, setExpandedItemIds] = useState<string[]>([]);
 
   const room = response?.room ?? null;
   const items = response?.items ?? [];
@@ -117,10 +129,23 @@ export default function FurnitureRoomDetail() {
     loadData();
   }, [roomId]);
 
+  useEffect(() => {
+    const currentIds = items.map((item) => item.id);
+    setExpandedItemIds((prev) => prev.filter((id) => currentIds.includes(id)));
+  }, [items]);
+
   const totalItems = useMemo(
     () => items.reduce((sum, item) => sum + (item.quantity || 0), 0),
     [items]
   );
+
+  function toggleExpanded(itemId: string) {
+    setExpandedItemIds((prev) =>
+      prev.includes(itemId)
+        ? prev.filter((id) => id !== itemId)
+        : [...prev, itemId]
+    );
+  }
 
   function openCreateModal() {
     setSelectedItem(null);
@@ -219,163 +244,206 @@ export default function FurnitureRoomDetail() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                {items.map((item) => (
-                  <article
-                    key={item.id}
-                    className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200"
-                  >
-                    <div className="flex flex-col gap-4 p-4 sm:p-5">
-                      <div className="flex flex-col gap-4 sm:flex-row">
-                        <div className="h-40 w-full shrink-0 overflow-hidden rounded-2xl bg-slate-100 sm:h-36 sm:w-40">
-                          {item.imageUrl ? (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.itemName}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-                              ไม่มีรูปภาพ
-                            </div>
-                          )}
-                        </div>
+              <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-2">
+                {items.map((item) => {
+                  const isExpanded = expandedItemIds.includes(item.id);
 
-                        <div className="min-w-0 flex-1 space-y-3">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <h2 className="truncate text-lg font-bold text-slate-900">
-                                {item.itemName}
-                              </h2>
-                              <p className="mt-1 text-sm text-slate-500">
-                                หมวดหมู่: {item.categoryName || "-"}
-                              </p>
+                  return (
+                    <article
+                      key={item.id}
+                      className="self-start overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(item.id)}
+                        className="block w-full text-left transition hover:bg-slate-50"
+                      >
+                        <div className="p-4 sm:p-5">
+                          <div className="flex gap-4">
+                            <div className="h-28 w-28 shrink-0 overflow-hidden rounded-2xl bg-slate-100 sm:h-32 sm:w-32">
+                              {item.imageUrl ? (
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.itemName}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
+                                  ไม่มีรูปภาพ
+                                </div>
+                              )}
                             </div>
 
-                            <div className="flex flex-wrap gap-2">
-                              <span
-                                className={`rounded-full px-3 py-1 text-xs font-semibold ${getConditionBadgeClass(
-                                  item.conditionStatus
-                                )}`}
-                              >
-                                {getConditionLabel(item.conditionStatus)}
-                              </span>
-                              <span
-                                className={`rounded-full px-3 py-1 text-xs font-semibold ${getUsageBadgeClass(
-                                  item.usageStatus
-                                )}`}
-                              >
-                                {getUsageLabel(item.usageStatus)}
-                              </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <h2 className="truncate text-xl font-bold text-slate-900 sm:text-2xl">
+                                    {item.itemName}
+                                  </h2>
+
+                                  <p className="mt-2 text-sm text-slate-500 sm:text-base">
+                                    {(item.categoryName || "เฟอร์นิเจอร์")}
+                                    {item.color ? ` • ${item.color}` : ""}
+                                    {item.quantity ? ` • x${item.quantity}` : ""}
+                                  </p>
+
+                                  <p className="mt-1 text-sm text-slate-500 sm:text-base">
+                                    {room?.roomLabel || "-"}
+                                  </p>
+                                </div>
+
+                                <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                                  {isExpanded ? "ยุบ ▲" : "ขยาย ▼"}
+                                </div>
+                              </div>
+
+                              <div className="mt-4 space-y-1 text-sm text-slate-600 sm:text-base">
+                                <div>
+                                  ใช้งาน: {item.monthsUsed ?? 0} เดือน
+                                  {item.warrantyExpiry
+                                    ? ` หมดอายุ: ${formatDate(item.warrantyExpiry)}`
+                                    : ""}
+                                </div>
+                                <div>
+                                  • อายุคงเหลือ ~ {getRemainingMonthsText(item)}
+                                </div>
+                              </div>
+
+                              <div className="mt-3">
+                                <span
+                                  className={`inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ${getUsageBadgeClass(
+                                    item.usageStatus
+                                  )}`}
+                                >
+                                  สถานะ : {getUsageLabel(item.usageStatus)}
+                                </span>
+                              </div>
                             </div>
                           </div>
+                        </div>
+                      </button>
 
-                          <div className="grid grid-cols-1 gap-3 text-sm text-slate-600 sm:grid-cols-2">
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">จำนวน</div>
-                              <div className="font-medium text-slate-800">
-                                {item.quantity}
+                      {isExpanded && (
+                        <div className="border-t border-slate-100 px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">จำนวน</div>
+                              <div className="mt-1 text-xl font-semibold text-slate-900">
+                                {item.quantity || 0}
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">ราคา</div>
-                              <div className="font-medium text-slate-800">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">ราคา</div>
+                              <div className="mt-1 text-xl font-semibold text-slate-900">
                                 {formatPrice(item.price)} บาท
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">ยี่ห้อ</div>
-                              <div className="font-medium text-slate-800">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">ยี่ห้อ</div>
+                              <div className="mt-1 font-medium text-slate-900">
                                 {item.brand || "-"}
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">รุ่น</div>
-                              <div className="font-medium text-slate-800">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">รุ่น</div>
+                              <div className="mt-1 font-medium text-slate-900">
                                 {item.model || "-"}
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">สี</div>
-                              <div className="font-medium text-slate-800">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">สี</div>
+                              <div className="mt-1 font-medium text-slate-900">
                                 {item.color || "-"}
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">ขนาด</div>
-                              <div className="font-medium text-slate-800">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">ขนาด</div>
+                              <div className="mt-1 font-medium text-slate-900">
                                 {item.sizeDetail || "-"}
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">วันที่ได้มา</div>
-                              <div className="font-medium text-slate-800">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">วันที่ได้มา</div>
+                              <div className="mt-1 font-medium text-slate-900">
                                 {formatDate(item.purchaseDate)}
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">วันหมดประกัน</div>
-                              <div className="font-medium text-slate-800">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">วันหมดประกัน</div>
+                              <div className="mt-1 font-medium text-slate-900">
                                 {formatDate(item.warrantyExpiry)}
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">
                                 อายุการใช้งาน (เดือน)
                               </div>
-                              <div className="font-medium text-slate-800">
+                              <div className="mt-1 font-medium text-slate-900">
                                 {item.lifespanMonths ?? "-"}
                               </div>
                             </div>
 
-                            <div className="rounded-xl bg-slate-50 px-3 py-2">
-                              <div className="text-xs text-slate-400">
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">
                                 ใช้งานแล้ว (เดือน)
                               </div>
-                              <div className="font-medium text-slate-800">
+                              <div className="mt-1 font-medium text-slate-900">
                                 {item.monthsUsed ?? "-"}
                               </div>
                             </div>
-                          </div>
 
-                          <div className="rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
-                            <div className="text-xs text-slate-400">หมายเหตุ</div>
-                            <div className="mt-1 whitespace-pre-line">
-                              {item.note || "-"}
+                            <div className="sm:col-span-2 rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">สภาพ</div>
+                              <div className="mt-2">
+                                <span
+                                  className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${getConditionBadgeClass(
+                                    item.conditionStatus
+                                  )}`}
+                                >
+                                  {getConditionLabel(item.conditionStatus)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="sm:col-span-2 rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">หมายเหตุ</div>
+                              <div className="mt-1 whitespace-pre-line font-medium text-slate-900">
+                                {item.note || "-"}
+                              </div>
                             </div>
                           </div>
+
+                          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(item)}
+                              className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                            >
+                              แก้ไข
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(item)}
+                              disabled={deletingItemId === item.id}
+                              className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deletingItemId === item.id ? "กำลังลบ..." : "ลบ"}
+                            </button>
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(item)}
-                          className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                        >
-                          แก้ไข
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(item)}
-                          disabled={deletingItemId === item.id}
-                          className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {deletingItemId === item.id ? "กำลังลบ..." : "ลบ"}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                ))}
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>

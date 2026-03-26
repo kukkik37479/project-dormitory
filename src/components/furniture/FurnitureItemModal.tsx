@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../../supabase";
 import {
   createFurnitureCategory,
   createFurnitureItem,
@@ -62,6 +63,8 @@ const DEFAULT_FORM: FormState = {
   lifespan_months: "",
 };
 
+const FURNITURE_BUCKET = "furniture-images";
+
 function toInputString(value: string | number | null | undefined) {
   return value === null || value === undefined ? "" : String(value);
 }
@@ -105,6 +108,22 @@ function toNullableInt(value: string) {
   if (!trimmed) return null;
   const num = Number(trimmed);
   return Number.isInteger(num) ? num : null;
+}
+
+function createSafeFileName(fileName: string) {
+  const dotIndex = fileName.lastIndexOf(".");
+  const ext = dotIndex >= 0 ? fileName.slice(dotIndex + 1).toLowerCase() : "jpg";
+  const base = dotIndex >= 0 ? fileName.slice(0, dotIndex) : fileName;
+
+  const safeBase = base
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\x00-\x7F]/g, "")
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return `${safeBase || "furniture"}-${Date.now()}.${ext}`;
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -177,6 +196,7 @@ export default function FurnitureItemModal({
   const [categories, setCategories] = useState<FurnitureCategory[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [error, setError] = useState("");
@@ -218,14 +238,14 @@ export default function FurnitureItemModal({
     if (!open) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !saving) {
+      if (event.key === "Escape" && !saving && !uploading) {
         onClose();
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, saving, onClose]);
+  }, [open, saving, uploading, onClose]);
 
   const previewImage = useMemo(() => {
     return form.image_url.trim() || "";
@@ -258,6 +278,57 @@ export default function FurnitureItemModal({
     } finally {
       setCreatingCategory(false);
     }
+  }
+
+  async function handleFileChange(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      setError("");
+
+      const safeFileName = createSafeFileName(file.name);
+      const filePath = `rooms/${roomId}/${safeFileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(FURNITURE_BUCKET)
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage
+        .from(FURNITURE_BUCKET)
+        .getPublicUrl(filePath);
+
+      setForm((prev) => ({
+        ...prev,
+        image_url: data.publicUrl,
+        image_path: filePath,
+        image_file_name: safeFileName,
+      }));
+    } catch (err: any) {
+      setError(err?.message || "อัปโหลดรูปไม่สำเร็จ");
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  }
+
+  function handleRemoveImage() {
+    setForm((prev) => ({
+      ...prev,
+      image_url: "",
+      image_path: "",
+      image_file_name: "",
+    }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -335,14 +406,17 @@ export default function FurnitureItemModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={saving}
+            disabled={saving || uploading}
             className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200 disabled:opacity-60"
           >
             ปิด
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="max-h-[calc(95vh-80px)] overflow-y-auto">
+        <form
+          onSubmit={handleSubmit}
+          className="max-h-[calc(95vh-80px)] overflow-y-auto"
+        >
           <div className="space-y-6 p-4 sm:p-6">
             {error ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -520,7 +594,9 @@ export default function FurnitureItemModal({
             </section>
 
             <section className="rounded-2xl border border-slate-200 p-4 sm:p-5">
-              <h3 className="text-lg font-bold text-slate-900">รายละเอียดเพิ่มเติม</h3>
+              <h3 className="text-lg font-bold text-slate-900">
+                รายละเอียดเพิ่มเติม
+              </h3>
 
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div>
@@ -544,14 +620,35 @@ export default function FurnitureItemModal({
                 </div>
 
                 <div className="md:col-span-2 xl:col-span-3">
-                  <FieldLabel>URL รูปภาพ</FieldLabel>
-                  <Input
-                    value={form.image_url}
-                    onChange={(e) => setField("image_url", e.target.value)}
-                    placeholder="ใส่ URL รูปภาพชั่วคราวก่อน"
-                  />
+                  <FieldLabel>อัปโหลดรูปภาพ</FieldLabel>
+
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700">
+                      {uploading ? "กำลังอัปโหลด..." : "เลือกรูปจากเครื่อง"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        disabled={uploading || saving}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {form.image_url ? (
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        disabled={uploading || saving}
+                        className="inline-flex items-center justify-center rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                      >
+                        ลบรูป
+                      </button>
+                    ) : null}
+                  </div>
+
                   <p className="mt-2 text-xs text-slate-500">
-                    ตอนนี้ใช้ URL รูปภาพชั่วคราวก่อน เดี๋ยวขั้นถัดไปค่อยต่ออัปโหลด Supabase Storage
+                    รองรับไฟล์รูปภาพจากเครื่อง แล้วจะอัปขึ้น Supabase Storage
+                    อัตโนมัติ
                   </p>
                 </div>
 
@@ -584,7 +681,7 @@ export default function FurnitureItemModal({
             <button
               type="button"
               onClick={onClose}
-              disabled={saving}
+              disabled={saving || uploading}
               className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
               ยกเลิก
@@ -592,10 +689,14 @@ export default function FurnitureItemModal({
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || uploading}
               className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving ? "กำลังบันทึก..." : "บันทึก"}
+              {uploading
+                ? "กำลังอัปโหลดรูป..."
+                : saving
+                ? "กำลังบันทึก..."
+                : "บันทึก"}
             </button>
           </div>
         </form>
