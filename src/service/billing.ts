@@ -1,3 +1,4 @@
+import { supabase } from "../supabase";
 import type {
   BillingFormOptionsResponse,
   CreateInvoicePayload,
@@ -7,6 +8,7 @@ import type {
 } from "../types/billing";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+const QR_BUCKET = "payment-qr";
 
 function getToken() {
   return (
@@ -20,12 +22,11 @@ function getToken() {
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
-  const isFormData = options?.body instanceof FormData;
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options?.headers || {}),
     },
@@ -72,11 +73,42 @@ export async function getDefaultBankAccount(): Promise<DefaultBankAccountRespons
   return request<DefaultBankAccountResponse>("/bank-accounts/default");
 }
 
-export async function saveDefaultBankAccount(
-  formData: FormData
-): Promise<DefaultBankAccountResponse> {
+export async function saveDefaultBankAccount(payload: {
+  bank_name: string;
+  account_name: string;
+  account_number: string;
+  promptpay_id?: string;
+  qr_image_url?: string | null;
+  qr_public_id?: string | null;
+}): Promise<DefaultBankAccountResponse> {
   return request<DefaultBankAccountResponse>("/bank-accounts/default", {
     method: "PUT",
-    body: formData,
+    body: JSON.stringify(payload),
   });
+}
+
+export async function uploadPaymentQrToSupabase(
+  dormId: string,
+  file: File
+): Promise<{ publicUrl: string; path: string }> {
+  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+  const filePath = `${dormId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from(QR_BUCKET)
+    .upload(filePath, file, {
+      upsert: false,
+      contentType: file.type,
+    });
+
+  if (error) {
+    throw new Error(`อัปโหลด QR ไม่สำเร็จ: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from(QR_BUCKET).getPublicUrl(filePath);
+
+  return {
+    publicUrl: data.publicUrl,
+    path: filePath,
+  };
 }

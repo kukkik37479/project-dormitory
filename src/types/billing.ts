@@ -25,6 +25,7 @@ export type BillingBankAccount = {
   account_number: string;
   promptpay_id?: string | null;
   qr_image_url?: string | null;
+  qr_public_id?: string | null;
   is_default?: boolean;
   created_at?: string;
   updated_at?: string;

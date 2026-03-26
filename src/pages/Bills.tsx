@@ -5,6 +5,7 @@ import {
   getDefaultBankAccount,
   getInvoiceFormOptions,
   saveDefaultBankAccount,
+  uploadPaymentQrToSupabase,
 } from "../service/billing";
 import type {
   BillingBuilding,
@@ -12,28 +13,6 @@ import type {
   BillingRoom,
   BillingSelectedRoomContract,
 } from "../types/billing";
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
-const FILE_BASE = API_BASE.replace(/\/api\/?$/, "");
-
-function toFileUrl(url?: string | null) {
-  if (!url) return "";
-
-  if (
-    url.startsWith("http://") ||
-    url.startsWith("https://") ||
-    url.startsWith("blob:") ||
-    url.startsWith("data:")
-  ) {
-    return url;
-  }
-
-  if (url.startsWith("/")) {
-    return `${FILE_BASE}${url}`;
-  }
-
-  return `${FILE_BASE}/${url}`;
-}
 
 function getErrorMessage(err: unknown) {
   if (err instanceof Error) return err.message;
@@ -107,6 +86,7 @@ export default function Bills() {
   const [paymentAccountName, setPaymentAccountName] = useState("");
   const [paymentAccountNumber, setPaymentAccountNumber] = useState("");
   const [paymentPromptpayId, setPaymentPromptpayId] = useState("");
+  const [paymentQrPublicId, setPaymentQrPublicId] = useState("");
   const [qrPreviewUrl, setQrPreviewUrl] = useState("");
   const [qrFile, setQrFile] = useState<File | null>(null);
 
@@ -175,7 +155,8 @@ export default function Bills() {
         setPaymentAccountName(data.bank_account.account_name || "");
         setPaymentAccountNumber(data.bank_account.account_number || "");
         setPaymentPromptpayId(data.bank_account.promptpay_id || "");
-        setQrPreviewUrl(toFileUrl(data.bank_account.qr_image_url));
+        setPaymentQrPublicId(data.bank_account.qr_public_id || "");
+        setQrPreviewUrl(data.bank_account.qr_image_url || "");
       } catch {
         // เงียบไว้ได้
       }
@@ -210,7 +191,8 @@ export default function Bills() {
       setPaymentAccountName(selected.bank_account.account_name || "");
       setPaymentAccountNumber(selected.bank_account.account_number || "");
       setPaymentPromptpayId(selected.bank_account.promptpay_id || "");
-      setQrPreviewUrl(toFileUrl(selected.bank_account.qr_image_url));
+      setPaymentQrPublicId(selected.bank_account.qr_public_id || "");
+      setQrPreviewUrl(selected.bank_account.qr_image_url || "");
     }
   }, [response?.selected_room_contract]);
 
@@ -249,9 +231,7 @@ export default function Bills() {
     if (!file) return;
 
     setQrFile(file);
-
-    const localUrl = URL.createObjectURL(file);
-    setQrPreviewUrl(localUrl);
+    setQrPreviewUrl(URL.createObjectURL(file));
     setSuccess("");
   }
 
@@ -272,25 +252,40 @@ export default function Bills() {
         throw new Error("กรุณากรอกเลขบัญชี");
       }
 
-      setSavingBankAccount(true);
-
-      const formData = new FormData();
-      formData.append("bank_name", paymentBankName);
-      formData.append("account_name", paymentAccountName);
-      formData.append("account_number", paymentAccountNumber);
-      formData.append("promptpay_id", paymentPromptpayId);
-
-      if (qrFile) {
-        formData.append("qr_image", qrFile);
+      if (!selectedRoomContract?.dorm_id) {
+        throw new Error("ไม่พบ dorm id สำหรับอัปโหลด QR");
       }
 
-      const result = await saveDefaultBankAccount(formData);
+      setSavingBankAccount(true);
+
+      let qrImageUrl: string | null = qrPreviewUrl || null;
+      let qrPublicId: string | null = paymentQrPublicId || null;
+
+      if (qrFile) {
+        const uploaded = await uploadPaymentQrToSupabase(
+          selectedRoomContract.dorm_id,
+          qrFile
+        );
+
+        qrImageUrl = uploaded.publicUrl;
+        qrPublicId = uploaded.path;
+      }
+
+      const result = await saveDefaultBankAccount({
+        bank_name: paymentBankName,
+        account_name: paymentAccountName,
+        account_number: paymentAccountNumber,
+        promptpay_id: paymentPromptpayId || "",
+        qr_image_url: qrImageUrl,
+        qr_public_id: qrPublicId,
+      });
 
       setPaymentBankName(result.bank_account?.bank_name || "");
       setPaymentAccountName(result.bank_account?.account_name || "");
       setPaymentAccountNumber(result.bank_account?.account_number || "");
       setPaymentPromptpayId(result.bank_account?.promptpay_id || "");
-      setQrPreviewUrl(toFileUrl(result.bank_account?.qr_image_url));
+      setPaymentQrPublicId(result.bank_account?.qr_public_id || "");
+      setQrPreviewUrl(result.bank_account?.qr_image_url || "");
       setQrFile(null);
 
       setSuccess("บันทึกบัญชีรับเงินของหอสำเร็จ");
