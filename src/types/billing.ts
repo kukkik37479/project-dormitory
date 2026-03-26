@@ -1,3 +1,13 @@
+export type BillingInvoiceStatus =
+  | "draft"
+  | "unpaid"
+  | "pending_review"
+  | "paid"
+  | "overdue"
+  | "cancelled";
+
+export type BillingPaymentStatus = "submitted" | "approved" | "rejected";
+
 export type BillingBuilding = {
   id: string;
   dorm_id: string;
@@ -98,4 +108,88 @@ export type CreateInvoiceResponse = {
 export type DefaultBankAccountResponse = {
   message: string;
   bank_account: BillingBankAccount | null;
+};
+
+/* =========================
+   Tenant billing / payment
+   ========================= */
+
+export type TenantPaymentItem = {
+  payment_id: string;
+  invoice_id: string;
+  submitted_amount: number | string;
+  slip_image_url?: string | null;
+  reference_no?: string | null;
+  paid_at?: string | null;
+  payment_method?: "transfer" | "cash" | "qr";
+  payment_status: BillingPaymentStatus;
+  reviewed_at?: string | null;
+  review_note?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type TenantBillingHistoryItem = {
+  invoice_id: string;
+  billing_month: string;
+  due_date: string;
+  room_number: string;
+  floor_no: number;
+  building_name: string;
+  building_code: string;
+  tenant_name?: string | null;
+  base_rent_amount: number | string;
+  water_amount: number | string;
+  electric_amount: number | string;
+  other_amount: number | string;
+  discount_amount: number | string;
+  total_amount: number | string;
+  invoice_status: BillingInvoiceStatus;
+  latest_payment: TenantPaymentItem | null;
+};
+
+export type TenantCurrentInvoice = {
+  invoice_id: string;
+  billing_month: string;
+  due_date: string;
+  room_id: string;
+  room_number: string;
+  floor_no: number;
+  building_id: string;
+  building_name: string;
+  building_code: string;
+  tenant_name?: string | null;
+  base_rent_amount: number | string;
+  water_amount: number | string;
+  electric_amount: number | string;
+  other_amount: number | string;
+  discount_amount: number | string;
+  total_amount: number | string;
+  invoice_status: BillingInvoiceStatus;
+  payment_bank_name?: string | null;
+  payment_account_name?: string | null;
+  payment_account_number?: string | null;
+  payment_promptpay_id?: string | null;
+  payment_qr_image_url?: string | null;
+  latest_payment: TenantPaymentItem | null;
+};
+
+export type TenantBillingOverviewResponse = {
+  message: string;
+  current_invoice: TenantCurrentInvoice | null;
+  history: TenantBillingHistoryItem[];
+};
+
+export type SubmitTenantPaymentPayload = {
+  invoice_id: string;
+  submitted_amount: number;
+  slip_image_url: string;
+  reference_no?: string;
+  paid_at?: string;
+  payment_method?: "transfer" | "cash" | "qr";
+};
+
+export type SubmitTenantPaymentResponse = {
+  message: string;
+  payment: TenantPaymentItem;
 };

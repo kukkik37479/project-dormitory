@@ -8,7 +8,8 @@ import RoomDetail from "./pages/RoomDetail";
 import Explore from "./pages/Explore";
 import DormPublic from "./pages/DormPublic";
 import OwnerRepairs from "./pages/OwnerRepairs";
-import Bills from "./pages/Bills";
+import BillsGateway from "./pages/BillsGateway";
+import Payments from "./pages/Payments";
 import FurniturePage from "./pages/Furniture";
 import FurnitureRoomDetail from "./pages/FurnitureRoomDetail";
 import RequireRole from "./components/RequireRole";
@@ -98,7 +99,7 @@ const router = createBrowserRouter([
         path: "payments",
         element: (
           <RequireRole allow={["owner"]}>
-            <TempPage title="การชำระเงิน" />
+            <Payments />
           </RequireRole>
         ),
       },
@@ -146,7 +147,7 @@ const router = createBrowserRouter([
         path: "bills",
         element: (
           <RequireRole allow={["owner", "tenant"]}>
-            <Bills />
+            <BillsGateway />
           </RequireRole>
         ),
       },
