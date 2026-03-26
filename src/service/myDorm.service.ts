@@ -155,6 +155,46 @@ export async function updateMyDormProfile(data: UpdateDormPayload) {
   return result;
 }
 
+export async function createDormAmenity(label_th: string) {
+  const token = getToken();
+
+  const res = await fetch(`${API_URL}/amenities`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ label_th }),
+  });
+
+  const data = await parseResponse(res);
+
+  if (!res.ok) {
+    throw new Error(data.message || "เพิ่มสิ่งอำนวยความสะดวกไม่สำเร็จ");
+  }
+
+  return data;
+}
+
+export async function deleteDormAmenity(code: string) {
+  const token = getToken();
+
+  const res = await fetch(`${API_URL}/amenities/${encodeURIComponent(code)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await parseResponse(res);
+
+  if (!res.ok) {
+    throw new Error(data.message || "ลบสิ่งอำนวยความสะดวกไม่สำเร็จ");
+  }
+
+  return data;
+}
+
 export async function deleteDormImagesFromSupabase(paths: string[]) {
   const validPaths = paths.filter(Boolean);
 

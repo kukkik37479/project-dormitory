@@ -12,21 +12,20 @@ import {
   deleteDormImagesFromSupabase,
   getMyDormProfile,
   updateMyDormProfile,
+  createDormAmenity,
+  deleteDormAmenity,
 } from "../service/myDorm.service";
 
 const LOCAL_CACHE_KEY = "my_dorm_local_cache_v1";
 
-type AmenityValue =
-  | "air_conditioner"
-  | "car_parking"
-  | "furniture"
-  | "motorcycle_parking"
-  | "water_heater"
-  | "elevator"
-  | "fan"
-  | "swimming_pool"
-  | "tv"
-  | "gym";
+type AmenityValue = string;
+
+type AmenityOption = {
+  code: string;
+  label_th: string;
+  sort_order?: number;
+  is_active?: boolean;
+};
 
 type RoomTypeItem = {
   id?: string;
@@ -88,6 +87,7 @@ type DormProfile = {
   status?: string;
   room_types?: RoomTypeItem[];
   amenities?: AmenityValue[];
+  amenity_options?: AmenityOption[];
   contact_phones?: PhoneItem[];
   images?: ImageItem[];
 };
@@ -183,19 +183,6 @@ const emptyAnnouncement: AnnouncementItem = {
   price: "4500",
   status: "available",
 };
-
-const amenityOptions: { label: string; value: AmenityValue }[] = [
-  { label: "เครื่องปรับอากาศ", value: "air_conditioner" },
-  { label: "ที่จอดรถ", value: "car_parking" },
-  { label: "เฟอร์นิเจอร์-ตู้, เตียง", value: "furniture" },
-  { label: "ที่จอดรถมอเตอร์ไซค์/จักรยาน", value: "motorcycle_parking" },
-  { label: "เครื่องทำน้ำอุ่น", value: "water_heater" },
-  { label: "ลิฟต์", value: "elevator" },
-  { label: "พัดลม", value: "fan" },
-  { label: "สระว่ายน้ำ", value: "swimming_pool" },
-  { label: "มี TV", value: "tv" },
-  { label: "โรงยิม / ฟิตเนส", value: "gym" },
-];
 
 function parseNullableNumber(value: string) {
   const trimmed = value.trim();
@@ -360,6 +347,9 @@ export default function MyDorm() {
 
   const [form, setForm] = useState<DormForm>(initialForm);
   const [amenities, setAmenities] = useState<AmenityValue[]>([]);
+  const [amenityOptions, setAmenityOptions] = useState<AmenityOption[]>([]);
+  const [newAmenityLabel, setNewAmenityLabel] = useState("");
+  const [savingAmenity, setSavingAmenity] = useState(false);
   const [roomTypes, setRoomTypes] = useState<RoomTypeItem[]>([
     { ...emptyRoomType },
   ]);
@@ -424,6 +414,11 @@ export default function MyDorm() {
       try {
         const data: MyDormResponse = await getMyDormProfile();
         const dorm = data.dorm || {};
+        setAmenityOptions(
+          dorm.amenity_options && dorm.amenity_options.length
+            ? dorm.amenity_options
+            : []
+        );
         const cached = loadLocalCache();
 
         setForm({
@@ -548,12 +543,66 @@ export default function MyDorm() {
     }));
   };
 
-  const handleAmenityChange = (value: AmenityValue) => {
+  const handleAmenityChange = (code: string) => {
     setAmenities((prev) =>
-      prev.includes(value)
-        ? prev.filter((item) => item !== value)
-        : [...prev, value]
+      prev.includes(code)
+        ? prev.filter((item) => item !== code)
+        : [...prev, code]
     );
+  };
+
+  const handleCreateAmenity = async () => {
+    const label = newAmenityLabel.trim();
+    if (!label) return;
+
+    try {
+      setError("");
+      setSavingAmenity(true);
+
+      const created = await createDormAmenity(label);
+
+      const newOption: AmenityOption = {
+        code: created.code,
+        label_th: created.label_th,
+        sort_order: 999,
+        is_active: true,
+      };
+
+      setAmenityOptions((prev) => [...prev, newOption]);
+      setAmenities((prev) =>
+        prev.includes(newOption.code) ? prev : [...prev, newOption.code]
+      );
+      setNewAmenityLabel("");
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "เพิ่มสิ่งอำนวยความสะดวกไม่สำเร็จ"
+      );
+    } finally {
+      setSavingAmenity(false);
+    }
+  };
+
+  const handleDeleteAmenityOption = async (code: string) => {
+    const confirmed = window.confirm("ต้องการลบสิ่งอำนวยความสะดวกนี้ใช่ไหม");
+    if (!confirmed) return;
+
+    try {
+      setError("");
+      await deleteDormAmenity(code);
+
+      setAmenityOptions((prev) => prev.filter((item) => item.code !== code));
+      setAmenities((prev) => prev.filter((item) => item !== code));
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "ลบสิ่งอำนวยความสะดวกไม่สำเร็จ"
+      );
+    }
   };
 
   const handleRoomTypeChange = (
@@ -956,25 +1005,62 @@ export default function MyDorm() {
                 <h2 className="mb-4 text-xl font-extrabold text-gray-900">
                   2. สิ่งอำนวยความสะดวก
                 </h2>
+
+                <div className="mb-4 flex flex-col gap-3 md:flex-row">
+                  <input
+                    value={newAmenityLabel}
+                    onChange={(e) => setNewAmenityLabel(e.target.value)}
+                    className="h-12 flex-1 rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none focus:ring-2 focus:ring-pink-300"
+                    placeholder="เพิ่มสิ่งอำนวยความสะดวกใหม่ เช่น อินเทอร์เน็ต Wi-Fi"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={handleCreateAmenity}
+                    disabled={savingAmenity || !newAmenityLabel.trim()}
+                    className="h-12 rounded-xl bg-[#ff4f8b] px-6 font-semibold text-white shadow hover:opacity-95 disabled:opacity-60"
+                  >
+                    {savingAmenity ? "กำลังเพิ่ม..." : "เพิ่มรายการ"}
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {amenityOptions.map((item) => (
-                    <label
-                      key={item.value}
-                      className="flex items-center gap-3 rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 py-3"
+                    <div
+                      key={item.code}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 py-3"
                     >
-                      <input
-                        type="checkbox"
-                        checked={amenities.includes(item.value)}
-                        onChange={() => handleAmenityChange(item.value)}
-                        className="h-4 w-4"
-                      />
-                      <span className="text-sm font-medium text-gray-700">
-                        {item.label}
-                      </span>
-                    </label>
+                      <label className="flex flex-1 items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={amenities.includes(item.code)}
+                          onChange={() => handleAmenityChange(item.code)}
+                          className="h-4 w-4"
+                        />
+                        <span className="text-sm font-medium text-gray-700">
+                          {item.label_th}
+                        </span>
+                      </label>
+
+                      {item.code.startsWith("custom_") && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAmenityOption(item.code)}
+                          className="rounded-lg bg-[#ef4444] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-95"
+                        >
+                          ลบ
+                        </button>
+                      )}
+                    </div>
                   ))}
-                </div>
               </div>
+
+  {amenityOptions.length === 0 && (
+    <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">
+      ยังไม่มีรายการสิ่งอำนวยความสะดวก
+    </div>
+  )}
+</div>
 
               <div>
                 <div className="mb-4 flex items-center justify-between gap-3">
