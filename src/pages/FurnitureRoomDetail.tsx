@@ -44,7 +44,7 @@ function getUsageLabel(value: FurnitureItem["usageStatus"]) {
     case "under_repair":
       return "ซ่อมอยู่";
     case "disposed":
-      return "จำหน่ายแล้ว";
+      return "เลิกใช้งาน";
     case "missing":
       return "สูญหาย";
     default:

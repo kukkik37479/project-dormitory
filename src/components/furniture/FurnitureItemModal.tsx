@@ -554,7 +554,7 @@ export default function FurnitureItemModal({
                   >
                     <option value="active">ใช้งานอยู่</option>
                     <option value="under_repair">ซ่อมอยู่</option>
-                    <option value="disposed">จำหน่ายแล้ว</option>
+                    <option value="disposed">เลิกใช้งาน</option>
                     <option value="missing">สูญหาย</option>
                   </Select>
                 </div>
