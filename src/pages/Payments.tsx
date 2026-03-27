@@ -59,30 +59,35 @@ function getInvoiceStatusMeta(status: OwnerPaymentInvoiceStatus) {
         label: "ตรวจสอบแล้ว",
         chipClass: "bg-emerald-100 text-emerald-700",
         rowClass: "bg-emerald-100/70",
+        cardClass: "border-emerald-200 bg-emerald-50/70",
       };
     case "pending_review":
       return {
         label: "รอตรวจสอบ",
         chipClass: "bg-amber-100 text-amber-700",
         rowClass: "bg-amber-50",
+        cardClass: "border-amber-200 bg-amber-50/80",
       };
     case "overdue":
       return {
         label: "ค้างชำระ",
         chipClass: "bg-rose-100 text-rose-700",
         rowClass: "bg-rose-100/80",
+        cardClass: "border-rose-200 bg-rose-50/80",
       };
     case "draft":
       return {
         label: "ฉบับร่าง",
         chipClass: "bg-slate-100 text-slate-700",
         rowClass: "bg-slate-50",
+        cardClass: "border-slate-200 bg-slate-50",
       };
     case "cancelled":
       return {
         label: "ยกเลิก",
         chipClass: "bg-slate-200 text-slate-700",
         rowClass: "bg-slate-100",
+        cardClass: "border-slate-200 bg-slate-100/70",
       };
     case "unpaid":
     default:
@@ -90,6 +95,7 @@ function getInvoiceStatusMeta(status: OwnerPaymentInvoiceStatus) {
         label: "ยังไม่ชำระ",
         chipClass: "bg-sky-100 text-sky-700",
         rowClass: "bg-sky-50",
+        cardClass: "border-sky-200 bg-sky-50/80",
       };
   }
 }
@@ -107,10 +113,12 @@ function SummaryCard({
 }) {
   return (
     <div className={`rounded-2xl p-5 text-white shadow-sm ${className}`}>
-      <div className="text-2xl font-extrabold">{title}</div>
+      <div className="text-xl font-extrabold sm:text-2xl">{title}</div>
       <div className="mt-2 text-sm">จำนวนห้องที่อยู่ในสถานะนี้ {count} ห้อง</div>
       <div className="mt-2 text-sm">จำนวนเงินรวม</div>
-      <div className="mt-1 text-2xl font-bold">{formatMoney(amount)} บาท</div>
+      <div className="mt-1 text-2xl font-bold sm:text-3xl">
+        {formatMoney(amount)} บาท
+      </div>
     </div>
   );
 }
@@ -134,10 +142,216 @@ function ActionIconButton({
       title={title}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-md text-xl transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-md text-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
     >
       {children}
     </button>
+  );
+}
+
+function ActionTextButton({
+  children,
+  onClick,
+  disabled = false,
+  className = "",
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PaymentActionButtons({
+  item,
+  onOpenDetail,
+  onOpenApprove,
+  onOpenReject,
+  mobile = false,
+}: {
+  item: OwnerPaymentListItem;
+  onOpenDetail: (paymentId?: string | null) => void;
+  onOpenApprove: (paymentId?: string | null) => void;
+  onOpenReject: (paymentId?: string | null) => void;
+  mobile?: boolean;
+}) {
+  const canApprove =
+    !!item.payment_id &&
+    item.invoice_status === "pending_review" &&
+    item.payment_status === "submitted";
+
+  const canReject =
+    !!item.payment_id &&
+    item.invoice_status === "pending_review" &&
+    item.payment_status === "submitted";
+
+  if (mobile) {
+    return (
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <ActionTextButton
+          onClick={() => onOpenDetail(item.payment_id)}
+          disabled={!item.payment_id}
+          className="bg-black text-white"
+        >
+          ดูหลักฐาน
+        </ActionTextButton>
+
+        <ActionTextButton
+          onClick={() => onOpenApprove(item.payment_id)}
+          disabled={!canApprove}
+          className="bg-green-600 text-white"
+        >
+          ยืนยัน
+        </ActionTextButton>
+
+        <ActionTextButton
+          onClick={() => onOpenReject(item.payment_id)}
+          disabled={!canReject}
+          className="bg-red-500 text-white"
+        >
+          ตีกลับ
+        </ActionTextButton>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-2">
+      <ActionIconButton
+        title="ดูหลักฐานการโอน"
+        onClick={() => onOpenDetail(item.payment_id)}
+        disabled={!item.payment_id}
+        className="bg-black text-white"
+      >
+        ≡
+      </ActionIconButton>
+
+      <ActionIconButton
+        title="ยืนยันการตรวจสอบ"
+        onClick={() => onOpenApprove(item.payment_id)}
+        disabled={!canApprove}
+        className="bg-green-600 text-white"
+      >
+        ✓
+      </ActionIconButton>
+
+      <ActionIconButton
+        title="ตีกลับรายการ"
+        onClick={() => onOpenReject(item.payment_id)}
+        disabled={!canReject}
+        className="bg-red-500 text-white"
+      >
+        ↺
+      </ActionIconButton>
+    </div>
+  );
+}
+
+function PaymentInfoRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-slate-100 py-2 last:border-b-0">
+      <div className="text-sm text-slate-500">{label}</div>
+      <div className="max-w-[60%] text-right text-sm font-semibold text-slate-800 break-words">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function PaymentMobileCard({
+  item,
+  onOpenDetail,
+  onOpenApprove,
+  onOpenReject,
+}: {
+  item: OwnerPaymentListItem;
+  onOpenDetail: (paymentId?: string | null) => void;
+  onOpenApprove: (paymentId?: string | null) => void;
+  onOpenReject: (paymentId?: string | null) => void;
+}) {
+  const meta = getInvoiceStatusMeta(item.invoice_status);
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 shadow-sm ${meta.cardClass}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-base font-extrabold text-slate-900">
+            ตึก {item.building_name || item.building_code || "-"} ห้อง {item.room_number}
+          </div>
+          <div className="mt-1 text-sm text-slate-600 break-words">
+            {item.room_type || "-"}
+          </div>
+          <div className="mt-1 text-sm text-slate-500 break-words">
+            ผู้เช่า: {item.tenant_name || "-"}
+          </div>
+        </div>
+
+        <span
+          className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${meta.chipClass}`}
+        >
+          {meta.label}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-white/80 p-3">
+        <div>
+          <div className="text-xs text-slate-500">ค่าเช่า</div>
+          <div className="mt-1 text-sm font-semibold text-slate-800">
+            {formatMoney(item.base_rent_amount)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-slate-500">ค่าไฟ</div>
+          <div className="mt-1 text-sm font-semibold text-slate-800">
+            {formatMoney(item.electric_amount)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-slate-500">ค่าน้ำ</div>
+          <div className="mt-1 text-sm font-semibold text-slate-800">
+            {formatMoney(item.water_amount)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-slate-500">ทั้งหมด</div>
+          <div className="mt-1 text-sm font-extrabold text-slate-900">
+            {formatMoney(item.total_amount)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 text-xs text-slate-500">
+        รอบบิล: {formatMonthLabel(item.billing_month)}
+      </div>
+
+      <div className="mt-4">
+        <PaymentActionButtons
+          item={item}
+          onOpenDetail={onOpenDetail}
+          onOpenApprove={onOpenApprove}
+          onOpenReject={onOpenReject}
+          mobile
+        />
+      </div>
+    </div>
   );
 }
 
@@ -155,20 +369,20 @@ function PaymentDetailModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-      <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-[28px] bg-[#f7f7f7] p-4 sm:p-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="rounded-[28px] bg-white p-6 shadow-sm">
-            <div className="text-3xl font-extrabold text-rose-600">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-3 sm:p-4">
+      <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-[24px] bg-[#f7f7f7] p-3 sm:rounded-[28px] sm:p-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-6">
+          <div className="rounded-[24px] bg-white p-4 shadow-sm sm:p-6">
+            <div className="text-2xl font-extrabold text-rose-600 sm:text-3xl">
               หลักฐานการโอน
             </div>
 
             {loading ? (
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-16 text-center text-sm text-slate-500">
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-14 text-center text-sm text-slate-500">
                 กำลังโหลดข้อมูล...
               </div>
             ) : !detail ? (
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-16 text-center text-sm text-slate-500">
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-14 text-center text-sm text-slate-500">
                 ไม่พบรายละเอียดการชำระเงิน
               </div>
             ) : (
@@ -178,20 +392,20 @@ function PaymentDetailModal({
                     <img
                       src={detail.slip_image_url}
                       alt="payment slip"
-                      className="max-h-[560px] rounded-2xl border border-slate-200 bg-white object-contain"
+                      className="max-h-[70vh] w-full rounded-2xl border border-slate-200 bg-white object-contain"
                     />
                   ) : (
-                    <div className="flex h-[360px] w-full max-w-[320px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
+                    <div className="flex h-[280px] w-full items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
                       ไม่มีรูปสลิป
                     </div>
                   )}
                 </div>
 
-                <div className="mt-6 flex justify-end">
+                <div className="mt-6 flex justify-stretch sm:justify-end">
                   <button
                     type="button"
                     onClick={onClose}
-                    className="rounded-xl bg-red-500 px-5 py-2 text-sm font-semibold text-white hover:bg-red-600"
+                    className="w-full rounded-xl bg-red-500 px-5 py-3 text-sm font-semibold text-white hover:bg-red-600 sm:w-auto sm:py-2"
                   >
                     ปิด
                   </button>
@@ -200,8 +414,8 @@ function PaymentDetailModal({
             )}
           </div>
 
-          <div className="rounded-[28px] bg-white p-6 shadow-sm">
-            <div className="text-3xl font-extrabold text-rose-600">
+          <div className="rounded-[24px] bg-white p-4 shadow-sm sm:p-6">
+            <div className="text-2xl font-extrabold text-rose-600 sm:text-3xl">
               รายละเอียดการชำระ
             </div>
 
@@ -210,49 +424,50 @@ function PaymentDetailModal({
             ) : !detail ? (
               <div className="mt-6 text-sm text-slate-500">ไม่พบข้อมูล</div>
             ) : (
-              <div className="mt-6 space-y-3 text-sm text-slate-700">
-                <div>
-                  ห้อง: <b>{detail.room_number}</b>
-                </div>
-                <div>
-                  ตึก: <b>{detail.building_name}</b>
-                </div>
-                <div>
-                  ประเภทห้อง: <b>{detail.room_type}</b>
-                </div>
-                <div>
-                  ผู้เช่า: <b>{detail.tenant_name || "-"}</b>
-                </div>
-                <div>
-                  รอบบิล: <b>{formatMonthLabel(detail.billing_month)}</b>
-                </div>
-                <div>
-                  วันครบกำหนด: <b>{formatDateThai(detail.due_date)}</b>
-                </div>
-                <div>
-                  จำนวนที่โอน: <b>{formatMoney(detail.submitted_amount)} บาท</b>
-                </div>
-                <div>
-                  เวลาที่โอน: <b>{formatDateTimeThai(detail.paid_at)}</b>
-                </div>
-                <div>
-                  ค่าเช่า: <b>{formatMoney(detail.base_rent_amount)} บาท</b>
-                </div>
-                <div>
-                  ค่าน้ำ: <b>{formatMoney(detail.water_amount)} บาท</b>
-                </div>
-                <div>
-                  ค่าไฟ: <b>{formatMoney(detail.electric_amount)} บาท</b>
-                </div>
-                <div>
-                  รวมทั้งหมด: <b>{formatMoney(detail.total_amount)} บาท</b>
-                </div>
-                <div>
-                  อ้างอิง: <b>{detail.reference_no || "-"}</b>
-                </div>
+              <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                <PaymentInfoRow label="ห้อง" value={detail.room_number} />
+                <PaymentInfoRow label="ตึก" value={detail.building_name} />
+                <PaymentInfoRow label="ประเภทห้อง" value={detail.room_type} />
+                <PaymentInfoRow label="ผู้เช่า" value={detail.tenant_name || "-"} />
+                <PaymentInfoRow
+                  label="รอบบิล"
+                  value={formatMonthLabel(detail.billing_month)}
+                />
+                <PaymentInfoRow
+                  label="วันครบกำหนด"
+                  value={formatDateThai(detail.due_date)}
+                />
+                <PaymentInfoRow
+                  label="จำนวนที่โอน"
+                  value={`${formatMoney(detail.submitted_amount)} บาท`}
+                />
+                <PaymentInfoRow
+                  label="เวลาที่โอน"
+                  value={formatDateTimeThai(detail.paid_at)}
+                />
+                <PaymentInfoRow
+                  label="ค่าเช่า"
+                  value={`${formatMoney(detail.base_rent_amount)} บาท`}
+                />
+                <PaymentInfoRow
+                  label="ค่าน้ำ"
+                  value={`${formatMoney(detail.water_amount)} บาท`}
+                />
+                <PaymentInfoRow
+                  label="ค่าไฟ"
+                  value={`${formatMoney(detail.electric_amount)} บาท`}
+                />
+                <PaymentInfoRow
+                  label="รวมทั้งหมด"
+                  value={`${formatMoney(detail.total_amount)} บาท`}
+                />
+                <PaymentInfoRow
+                  label="อ้างอิง"
+                  value={detail.reference_no || "-"}
+                />
 
                 {detail.review_note && (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-700">
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
                     หมายเหตุ: {detail.review_note}
                   </div>
                 )}
@@ -279,22 +494,22 @@ function ApproveModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-      <div className="w-full max-w-2xl rounded-[28px] bg-white p-8 shadow-lg">
-        <div className="text-3xl font-extrabold text-rose-600">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-3 sm:p-4">
+      <div className="w-full max-w-2xl rounded-[24px] bg-white p-5 shadow-lg sm:rounded-[28px] sm:p-8">
+        <div className="text-2xl font-extrabold text-rose-600 sm:text-3xl">
           ยืนยันการตรวจสอบ
         </div>
 
-        <div className="mt-8 text-center text-3xl font-bold text-slate-900">
+        <div className="mt-6 text-center text-xl font-bold text-slate-900 sm:mt-8 sm:text-3xl">
           คุณได้ตรวจสอบความถูกต้องก่อนกดยืนยันใช่หรือไม่
         </div>
 
-        <div className="mt-10 flex items-center justify-center gap-4">
+        <div className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-xl bg-red-500 px-6 py-3 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-60"
+            className="w-full rounded-xl bg-red-500 px-6 py-3 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-60 sm:w-auto"
           >
             ยกเลิก
           </button>
@@ -303,7 +518,7 @@ function ApproveModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="rounded-xl bg-green-500 px-6 py-3 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-60"
+            className="w-full rounded-xl bg-green-500 px-6 py-3 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-60 sm:w-auto"
           >
             {loading ? "กำลังบันทึก..." : "บันทึก"}
           </button>
@@ -331,9 +546,9 @@ function RejectModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-      <div className="w-full max-w-2xl rounded-[28px] bg-white p-8 shadow-lg">
-        <div className="text-3xl font-extrabold text-rose-600">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-3 sm:p-4">
+      <div className="w-full max-w-2xl rounded-[24px] bg-white p-5 shadow-lg sm:rounded-[28px] sm:p-8">
+        <div className="text-2xl font-extrabold text-rose-600 sm:text-3xl">
           ตีกลับรายการชำระเงิน
         </div>
 
@@ -351,12 +566,12 @@ function RejectModal({
           />
         </div>
 
-        <div className="mt-8 flex items-center justify-center gap-4">
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-xl bg-slate-500 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-600 disabled:opacity-60"
+            className="w-full rounded-xl bg-slate-500 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-600 disabled:opacity-60 sm:w-auto"
           >
             ยกเลิก
           </button>
@@ -365,7 +580,7 @@ function RejectModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="rounded-xl bg-red-500 px-6 py-3 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-60"
+            className="w-full rounded-xl bg-red-500 px-6 py-3 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-60 sm:w-auto"
           >
             {loading ? "กำลังบันทึก..." : "ตีกลับ"}
           </button>
@@ -437,6 +652,7 @@ export default function Payments() {
 
   useEffect(() => {
     loadPayments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, month]);
 
   const filteredItems = useMemo(() => {
@@ -445,10 +661,11 @@ export default function Payments() {
 
     return items.filter((item) => {
       return (
-        item.room_number.toLowerCase().includes(q) ||
-        item.building_name.toLowerCase().includes(q) ||
-        item.building_code.toLowerCase().includes(q) ||
-        (item.tenant_name || "").toLowerCase().includes(q)
+        (item.room_number || "").toLowerCase().includes(q) ||
+        (item.building_name || "").toLowerCase().includes(q) ||
+        (item.building_code || "").toLowerCase().includes(q) ||
+        (item.tenant_name || "").toLowerCase().includes(q) ||
+        (item.room_type || "").toLowerCase().includes(q)
       );
     });
   }, [items, search]);
@@ -580,23 +797,25 @@ export default function Payments() {
         </div>
       )}
 
-      <section className="rounded-[30px] bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
-        <div className="text-4xl font-extrabold text-slate-900">รายการบิล</div>
+      <section className="rounded-[24px] bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:rounded-[30px] sm:p-6">
+        <div className="text-3xl font-extrabold text-slate-900 sm:text-4xl">
+          รายการบิล
+        </div>
 
-        <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_200px] lg:items-center">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="ค้นหาห้อง/ค้นหาตึก"
-              className="h-11 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-rose-400"
+              className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-rose-400"
             />
 
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="h-11 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-rose-400"
+              className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-rose-400"
             >
               <option value="all">ทั้งหมด</option>
               <option value="pending_review">รอตรวจสอบ</option>
@@ -610,29 +829,42 @@ export default function Payments() {
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
-            className="h-11 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-rose-400"
+            className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-rose-400"
           />
         </div>
 
-        <div className="mt-6 overflow-x-auto">
-          <table className="w-full table-fixed overflow-hidden rounded-2xl">
-            <colgroup>
-              <col className="w-[8%]" />
-              <col className="w-[8%]" />
-              <col className="w-[14%]" />
-              <col className="w-[12%]" />
-              <col className="w-[12%]" />
-              <col className="w-[12%]" />
-              <col className="w-[12%]" />
-              <col className="w-[10%]" />
-              <col className="w-[12%]" />
-            </colgroup>
+        <div className="mt-6 md:hidden">
+          {loading ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+              กำลังโหลดข้อมูล...
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+              ไม่พบรายการชำระเงิน
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredItems.map((item) => (
+                <PaymentMobileCard
+                  key={`${item.invoice_id}-${item.payment_id || "no-payment"}`}
+                  item={item}
+                  onOpenDetail={handleOpenDetail}
+                  onOpenApprove={handleOpenApprove}
+                  onOpenReject={handleOpenReject}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
+        <div className="mt-6 hidden overflow-x-auto md:block">
+          <table className="min-w-[980px] overflow-hidden rounded-2xl">
             <thead>
               <tr className="bg-rose-100 text-left text-sm font-semibold text-slate-700">
                 <th className="px-4 py-4">ตึก</th>
                 <th className="px-4 py-4">ห้อง</th>
                 <th className="px-4 py-4">ประเภทห้อง</th>
+                <th className="px-4 py-4">รอบบิล</th>
                 <th className="px-4 py-4">ค่าเช่า</th>
                 <th className="px-4 py-4">ค่าไฟ</th>
                 <th className="px-4 py-4">ค่าน้ำ</th>
@@ -646,7 +878,7 @@ export default function Payments() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="bg-white px-4 py-10 text-center text-sm text-slate-500"
                   >
                     กำลังโหลดข้อมูล...
@@ -655,7 +887,7 @@ export default function Payments() {
               ) : filteredItems.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="bg-white px-4 py-10 text-center text-sm text-slate-500"
                   >
                     ไม่พบรายการชำระเงิน
@@ -664,15 +896,6 @@ export default function Payments() {
               ) : (
                 filteredItems.map((item) => {
                   const meta = getInvoiceStatusMeta(item.invoice_status);
-                  const canApprove =
-                    item.payment_id &&
-                    item.invoice_status === "pending_review" &&
-                    item.payment_status === "submitted";
-
-                  const canReject =
-                    item.payment_id &&
-                    item.invoice_status === "pending_review" &&
-                    item.payment_status === "submitted";
 
                   return (
                     <tr
@@ -680,17 +903,21 @@ export default function Payments() {
                       className={`border-t border-white/60 text-sm text-slate-800 ${meta.rowClass}`}
                     >
                       <td className="px-4 py-4 font-semibold">
-                        <div className="truncate">
+                        <div className="max-w-[130px] truncate">
                           {item.building_name || item.building_code || "-"}
                         </div>
                       </td>
 
                       <td className="px-4 py-4 font-semibold">
-                        <div className="truncate">{item.room_number}</div>
+                        <div className="max-w-[90px] truncate">{item.room_number}</div>
                       </td>
 
                       <td className="px-4 py-4">
-                        <div className="truncate">{item.room_type}</div>
+                        <div className="max-w-[150px] truncate">{item.room_type}</div>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        {formatMonthLabel(item.billing_month)}
                       </td>
 
                       <td className="px-4 py-4">{formatMoney(item.base_rent_amount)}</td>
@@ -709,34 +936,12 @@ export default function Payments() {
                       </td>
 
                       <td className="px-4 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <ActionIconButton
-                            title="ดูหลักฐานการโอน"
-                            onClick={() => handleOpenDetail(item.payment_id)}
-                            disabled={!item.payment_id}
-                            className="bg-black text-white"
-                          >
-                            ≡
-                          </ActionIconButton>
-
-                          <ActionIconButton
-                            title="ยืนยันการตรวจสอบ"
-                            onClick={() => handleOpenApprove(item.payment_id)}
-                            disabled={!canApprove}
-                            className="bg-green-600 text-white"
-                          >
-                            ✓
-                          </ActionIconButton>
-
-                          <ActionIconButton
-                            title="ตีกลับรายการ"
-                            onClick={() => handleOpenReject(item.payment_id)}
-                            disabled={!canReject}
-                            className="bg-red-500 text-white"
-                          >
-                            ↺
-                          </ActionIconButton>
-                        </div>
+                        <PaymentActionButtons
+                          item={item}
+                          onOpenDetail={handleOpenDetail}
+                          onOpenApprove={handleOpenApprove}
+                          onOpenReject={handleOpenReject}
+                        />
                       </td>
                     </tr>
                   );
@@ -746,7 +951,7 @@ export default function Payments() {
           </table>
         </div>
 
-        <div className="mt-6 text-sm text-slate-500">
+        <div className="mt-6 text-sm leading-6 text-slate-500">
           ถ้ามีสลิปอัปเดตจะเข้ามาอยู่ในสถานะรอตรวจสอบ • สีเขียว = ตรวจสอบแล้ว
           • สีแดง = ค้างชำระ
         </div>

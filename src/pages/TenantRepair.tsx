@@ -15,6 +15,8 @@ import type {
   TenantRepairFormOptions,
 } from "../service/repair.service";
 
+const MOBILE_BREAKPOINT = 768;
+
 function formatThaiDate(date?: string | null) {
   if (!date) return "-";
   const parsed = new Date(date);
@@ -108,6 +110,11 @@ function getPriorityLabel(value: RepairPriorityValue) {
 }
 
 export default function TenantRepair() {
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth <= MOBILE_BREAKPOINT;
+  });
+
   const [loadingPage, setLoadingPage] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -133,6 +140,16 @@ export default function TenantRepair() {
     }
     return getStatusColor(selectedRepair.status);
   }, [selectedRepair]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     if (beforeFiles.length === 0) {
@@ -278,11 +295,45 @@ export default function TenantRepair() {
     return `${building ? `ตึก ${building} ` : ""}ห้อง ${formOptions.room.roomNumber}`;
   }, [formOptions]);
 
+  const sectionCardStyle: React.CSSProperties = {
+    background: "#FFFFFF",
+    borderRadius: isMobile ? 20 : 24,
+    padding: isMobile ? 16 : 24,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+    minWidth: 0,
+  };
+
   return (
-    <div style={{ padding: 24, background: "#F7F7F8", minHeight: "100vh" }}>
+    <div
+      style={{
+        padding: isMobile ? "18px 12px 24px" : 24,
+        background: "#F7F7F8",
+        minHeight: "100vh",
+        overflowX: "hidden",
+      }}
+    >
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 38, fontWeight: 700, marginBottom: 8 }}>แจ้งซ่อม</h1>
-        <p style={{ color: "#6B7280", marginBottom: 24 }}>
+        <h1
+          style={{
+            fontSize: isMobile ? 26 : 38,
+            fontWeight: 700,
+            marginBottom: 8,
+            lineHeight: 1.2,
+            wordBreak: "break-word",
+          }}
+        >
+          แจ้งซ่อม
+        </h1>
+
+        <p
+          style={{
+            color: "#6B7280",
+            marginBottom: isMobile ? 18 : 24,
+            fontSize: isMobile ? 14 : 16,
+            lineHeight: 1.5,
+            wordBreak: "break-word",
+          }}
+        >
           ห้องปัจจุบัน: {roomLabel}
         </p>
 
@@ -294,6 +345,7 @@ export default function TenantRepair() {
               borderRadius: 12,
               background: "#FDE2E2",
               color: "#C0392B",
+              wordBreak: "break-word",
             }}
           >
             {errorMessage}
@@ -303,8 +355,8 @@ export default function TenantRepair() {
         {loadingPage ? (
           <div
             style={{
-              padding: 24,
-              borderRadius: 20,
+              padding: isMobile ? 16 : 24,
+              borderRadius: isMobile ? 16 : 20,
               background: "#FFFFFF",
               boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
             }}
@@ -315,20 +367,21 @@ export default function TenantRepair() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1.2fr 1fr",
-              gap: 24,
+              gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr",
+              gap: isMobile ? 16 : 24,
               alignItems: "start",
             }}
           >
-            <div
-              style={{
-                background: "#FFFFFF",
-                borderRadius: 24,
-                padding: 24,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
-              }}
-            >
-              <h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 20 }}>
+            <div style={sectionCardStyle}>
+              <h2
+                style={{
+                  fontSize: isMobile ? 22 : 30,
+                  fontWeight: 700,
+                  marginBottom: 18,
+                  lineHeight: 1.25,
+                  wordBreak: "break-word",
+                }}
+              >
                 รายละเอียดการแจ้งซ่อม
               </h2>
 
@@ -351,6 +404,8 @@ export default function TenantRepair() {
                       border: "1px solid #E5E7EB",
                       padding: "0 14px",
                       fontSize: 15,
+                      boxSizing: "border-box",
+                      background: "#FFFFFF",
                     }}
                   >
                     {(formOptions?.categories || []).map((item) => (
@@ -379,6 +434,8 @@ export default function TenantRepair() {
                       border: "1px solid #E5E7EB",
                       padding: "0 14px",
                       fontSize: 15,
+                      boxSizing: "border-box",
+                      background: "#FFFFFF",
                     }}
                   >
                     {(formOptions?.priorities || []).map((item) => (
@@ -407,6 +464,8 @@ export default function TenantRepair() {
                       border: "1px solid #E5E7EB",
                       padding: "0 14px",
                       fontSize: 15,
+                      boxSizing: "border-box",
+                      background: "#FFFFFF",
                     }}
                   >
                     <option value="">ไม่ระบุ</option>
@@ -431,7 +490,7 @@ export default function TenantRepair() {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="เช่น แอร์มีน้ำหยด ตู้เสื้อผ้าบานพับหลวม ก๊อกน้ำรั่ว"
-                    rows={5}
+                    rows={isMobile ? 4 : 5}
                     style={{
                       width: "100%",
                       borderRadius: 12,
@@ -439,6 +498,9 @@ export default function TenantRepair() {
                       padding: 14,
                       fontSize: 15,
                       resize: "vertical",
+                      boxSizing: "border-box",
+                      fontFamily: "inherit",
+                      lineHeight: 1.5,
                     }}
                   />
                 </div>
@@ -465,10 +527,11 @@ export default function TenantRepair() {
                       padding: 12,
                       fontSize: 14,
                       background: "#FFFFFF",
+                      boxSizing: "border-box",
                     }}
                   />
 
-                  <div style={{ marginTop: 8, color: "#6B7280", fontSize: 13 }}>
+                  <div style={{ marginTop: 8, color: "#6B7280", fontSize: 13, lineHeight: 1.5 }}>
                     อัปโหลดได้หลายรูป รองรับเฉพาะไฟล์รูปภาพ
                   </div>
 
@@ -476,7 +539,9 @@ export default function TenantRepair() {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gridTemplateColumns: isMobile
+                          ? "repeat(2, minmax(0, 1fr))"
+                          : "repeat(3, minmax(0, 1fr))",
                         gap: 12,
                         marginTop: 14,
                       }}
@@ -488,10 +553,11 @@ export default function TenantRepair() {
                           alt={`before-preview-${index + 1}`}
                           style={{
                             width: "100%",
-                            height: 140,
+                            height: isMobile ? 110 : 140,
                             objectFit: "cover",
                             borderRadius: 16,
                             border: "1px solid #E5E7EB",
+                            display: "block",
                           }}
                         />
                       ))}
@@ -499,7 +565,12 @@ export default function TenantRepair() {
                   ) : null}
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: isMobile ? "stretch" : "flex-end",
+                  }}
+                >
                   <button
                     type="submit"
                     disabled={submitting}
@@ -508,11 +579,12 @@ export default function TenantRepair() {
                       borderRadius: 12,
                       background: "#F63D7A",
                       color: "#FFFFFF",
-                      padding: "12px 20px",
+                      padding: isMobile ? "13px 18px" : "12px 20px",
                       fontSize: 15,
                       fontWeight: 700,
                       cursor: submitting ? "not-allowed" : "pointer",
                       opacity: submitting ? 0.7 : 1,
+                      width: isMobile ? "100%" : "auto",
                     }}
                   >
                     {submitting ? "กำลังบันทึก..." : "บันทึก"}
@@ -521,17 +593,22 @@ export default function TenantRepair() {
               </form>
             </div>
 
-            <div style={{ display: "grid", gap: 24 }}>
+            <div style={{ display: "grid", gap: isMobile ? 16 : 24 }}>
               <div
                 style={{
-                  background: "#FFFFFF",
-                  borderRadius: 24,
-                  padding: 24,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
-                  minHeight: 320,
+                  ...sectionCardStyle,
+                  minHeight: isMobile ? undefined : 320,
                 }}
               >
-                <h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 16 }}>
+                <h2
+                  style={{
+                    fontSize: isMobile ? 22 : 30,
+                    fontWeight: 700,
+                    marginBottom: 16,
+                    lineHeight: 1.25,
+                    wordBreak: "break-word",
+                  }}
+                >
                   สถานะงาน
                 </h2>
 
@@ -542,22 +619,36 @@ export default function TenantRepair() {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 16,
+                        gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+                        gap: 14,
                         marginBottom: 16,
                       }}
                     >
                       <div>
-                        <div style={{ color: "#6B7280", marginBottom: 4 }}>
-                          เฟอร์นิเจอร์
-                        </div>
-                        <div style={{ fontWeight: 700 }}>
+                        <div style={{ color: "#6B7280", marginBottom: 4 }}>เฟอร์นิเจอร์</div>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            lineHeight: 1.5,
+                            wordBreak: "break-word",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
                           {selectedRepair.furniture?.itemName || "-"}
                         </div>
                       </div>
                       <div>
                         <div style={{ color: "#6B7280", marginBottom: 4 }}>ปัญหา</div>
-                        <div style={{ fontWeight: 700 }}>{selectedRepair.description}</div>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            lineHeight: 1.5,
+                            wordBreak: "break-word",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {selectedRepair.description}
+                        </div>
                       </div>
                     </div>
 
@@ -569,6 +660,7 @@ export default function TenantRepair() {
                           padding: "8px 14px",
                           borderRadius: 999,
                           fontWeight: 700,
+                          fontSize: isMobile ? 13 : 14,
                           ...selectedStatusStyle,
                         }}
                       >
@@ -576,7 +668,14 @@ export default function TenantRepair() {
                       </span>
                     </div>
 
-                    <div style={{ marginBottom: 16, color: "#6B7280" }}>
+                    <div
+                      style={{
+                        marginBottom: 16,
+                        color: "#6B7280",
+                        lineHeight: 1.5,
+                        wordBreak: "break-word",
+                      }}
+                    >
                       แจ้งเมื่อ {formatThaiDateTime(selectedRepair.requestedAt)}
                     </div>
 
@@ -588,10 +687,24 @@ export default function TenantRepair() {
                             <div style={{ color: "#6B7280", fontSize: 14 }}>
                               {formatThaiDate(log.changedAt)}
                             </div>
-                            <div style={{ fontWeight: 700, color: style.color }}>
+                            <div
+                              style={{
+                                fontWeight: 700,
+                                color: style.color,
+                                wordBreak: "break-word",
+                              }}
+                            >
                               • {getStatusLabel(log.newStatus)}
                             </div>
-                            <div style={{ color: "#4B5563" }}>{log.note || "-"}</div>
+                            <div
+                              style={{
+                                color: "#4B5563",
+                                wordBreak: "break-word",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {log.note || "-"}
+                            </div>
                           </div>
                         );
                       })}
@@ -599,13 +712,13 @@ export default function TenantRepair() {
 
                     {(selectedRepair.afterImages || []).length > 0 ? (
                       <div style={{ marginTop: 16 }}>
-                        <div style={{ fontWeight: 700, marginBottom: 8 }}>
-                          รูปหลังซ่อม
-                        </div>
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>รูปหลังซ่อม</div>
                         <div
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                            gridTemplateColumns: isMobile
+                              ? "1fr"
+                              : "repeat(2, minmax(0, 1fr))",
                             gap: 12,
                           }}
                         >
@@ -616,9 +729,10 @@ export default function TenantRepair() {
                               alt="after-repair"
                               style={{
                                 width: "100%",
-                                height: 160,
+                                height: isMobile ? 180 : 160,
                                 objectFit: "cover",
                                 borderRadius: 16,
+                                display: "block",
                               }}
                             />
                           ))}
@@ -631,23 +745,28 @@ export default function TenantRepair() {
                 )}
               </div>
 
-              <div
-                style={{
-                  background: "#FFFFFF",
-                  borderRadius: 24,
-                  padding: 24,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
-                }}
-              >
+              <div style={sectionCardStyle}>
                 <div
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
-                    alignItems: "center",
+                    alignItems: isMobile ? "stretch" : "center",
+                    flexDirection: isMobile ? "column" : "row",
+                    gap: 12,
                     marginBottom: 16,
                   }}
                 >
-                  <h2 style={{ fontSize: 28, fontWeight: 700 }}>ประวัติการแจ้งซ่อม</h2>
+                  <h2
+                    style={{
+                      fontSize: isMobile ? 22 : 28,
+                      fontWeight: 700,
+                      lineHeight: 1.25,
+                      margin: 0,
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    ประวัติการแจ้งซ่อม
+                  </h2>
 
                   {selectedRepair?.status === "pending" ? (
                     <button
@@ -663,6 +782,7 @@ export default function TenantRepair() {
                         fontWeight: 700,
                         cursor: cancelling ? "not-allowed" : "pointer",
                         opacity: cancelling ? 0.7 : 1,
+                        width: isMobile ? "100%" : "auto",
                       }}
                     >
                       {cancelling ? "กำลังยกเลิก..." : "ยกเลิกรายการที่เลือก"}
@@ -690,19 +810,30 @@ export default function TenantRepair() {
                               : "1px solid rgba(0,0,0,0.08)",
                             borderRadius: 18,
                             background: active ? "#FFF5F8" : "#FFFFFF",
-                            padding: 16,
+                            padding: isMobile ? 14 : 16,
                             cursor: "pointer",
+                            width: "100%",
+                            boxSizing: "border-box",
                           }}
                         >
                           <div
                             style={{
                               display: "flex",
                               justifyContent: "space-between",
-                              gap: 16,
+                              flexDirection: isMobile ? "column" : "row",
+                              alignItems: isMobile ? "flex-start" : "center",
+                              gap: 10,
                               marginBottom: 8,
                             }}
                           >
-                            <div style={{ fontWeight: 700 }}>
+                            <div
+                              style={{
+                                fontWeight: 700,
+                                lineHeight: 1.45,
+                                wordBreak: "break-word",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
                               {item.furniture?.itemName || item.title}
                             </div>
                             <span
@@ -721,7 +852,15 @@ export default function TenantRepair() {
                             </span>
                           </div>
 
-                          <div style={{ color: "#4B5563", marginBottom: 8 }}>
+                          <div
+                            style={{
+                              color: "#4B5563",
+                              marginBottom: 8,
+                              lineHeight: 1.5,
+                              wordBreak: "break-word",
+                              overflowWrap: "anywhere",
+                            }}
+                          >
                             {item.description}
                           </div>
 
@@ -729,16 +868,17 @@ export default function TenantRepair() {
                             style={{
                               display: "flex",
                               justifyContent: "space-between",
+                              flexDirection: isMobile ? "column" : "row",
                               flexWrap: "wrap",
                               gap: 8,
                               color: "#6B7280",
                               fontSize: 14,
+                              lineHeight: 1.5,
                             }}
                           >
                             <span>{formatThaiDate(item.requestedAt)}</span>
                             <span>
-                              {getCategoryLabel(item.category)} ·{" "}
-                              {getPriorityLabel(item.priority)}
+                              {getCategoryLabel(item.category)} · {getPriorityLabel(item.priority)}
                             </span>
                           </div>
                         </button>

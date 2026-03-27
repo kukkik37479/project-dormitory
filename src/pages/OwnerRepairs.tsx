@@ -7,6 +7,8 @@ import {
 import { uploadRepairImages } from "../service/repairUpload.service";
 import type { RepairRequestItem, RepairStatusValue } from "../service/repair.service";
 
+const MOBILE_BREAKPOINT = 768;
+
 function formatThaiDate(date?: string | null) {
   if (!date) return "-";
   const parsed = new Date(date);
@@ -108,6 +110,11 @@ const statusOptions: Array<{ value: RepairStatusValue; label: string }> = [
 ];
 
 export default function OwnerRepairs() {
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth <= MOBILE_BREAKPOINT;
+  });
+
   const [loadingPage, setLoadingPage] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -137,6 +144,16 @@ export default function OwnerRepairs() {
   const isClosed = selectedRepair
     ? selectedRepair.status === "completed" || selectedRepair.status === "cancelled"
     : false;
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     if (afterFiles.length === 0) {
@@ -264,10 +281,33 @@ export default function OwnerRepairs() {
     }
   }
 
+  const cardStyle = {
+    background: "#FFFFFF",
+    borderRadius: isMobile ? 20 : 24,
+    padding: isMobile ? 16 : 24,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+    minWidth: 0,
+  } as const;
+
   return (
-    <div style={{ padding: 24, background: "#F7F7F8", minHeight: "100vh" }}>
+    <div
+      style={{
+        padding: isMobile ? "18px 12px 24px" : 24,
+        background: "#F7F7F8",
+        minHeight: "100vh",
+        overflowX: "hidden",
+      }}
+    >
       <div style={{ maxWidth: 1500, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 38, fontWeight: 700, marginBottom: 24 }}>
+        <h1
+          style={{
+            fontSize: isMobile ? 26 : 38,
+            fontWeight: 700,
+            marginBottom: isMobile ? 18 : 24,
+            lineHeight: 1.2,
+            wordBreak: "break-word",
+          }}
+        >
           จัดการรายการแจ้งซ่อม
         </h1>
 
@@ -279,6 +319,7 @@ export default function OwnerRepairs() {
               borderRadius: 12,
               background: "#FDE2E2",
               color: "#C0392B",
+              wordBreak: "break-word",
             }}
           >
             {errorMessage}
@@ -288,17 +329,15 @@ export default function OwnerRepairs() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "340px 1fr 380px",
-            gap: 24,
+            gridTemplateColumns: isMobile ? "1fr" : "340px 1fr 380px",
+            gap: isMobile ? 16 : 24,
             alignItems: "start",
           }}
         >
           <div
             style={{
-              background: "#FFFFFF",
-              borderRadius: 24,
-              padding: 20,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+              ...cardStyle,
+              padding: isMobile ? 16 : 20,
             }}
           >
             <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
@@ -322,6 +361,7 @@ export default function OwnerRepairs() {
                     border: "1px solid #E5E7EB",
                     padding: "0 14px",
                     fontSize: 14,
+                    boxSizing: "border-box",
                   }}
                 />
               </div>
@@ -344,6 +384,7 @@ export default function OwnerRepairs() {
                     border: "1px solid #E5E7EB",
                     padding: "0 14px",
                     fontSize: 14,
+                    boxSizing: "border-box",
                   }}
                 >
                   <option value="">ทั้งหมด</option>
@@ -367,13 +408,22 @@ export default function OwnerRepairs() {
                   fontSize: 14,
                   fontWeight: 700,
                   cursor: "pointer",
+                  width: "100%",
                 }}
               >
                 ค้นหา
               </button>
             </div>
 
-            <h2 style={{ fontSize: 26, fontWeight: 700, marginBottom: 14 }}>
+            <h2
+              style={{
+                fontSize: isMobile ? 22 : 26,
+                fontWeight: 700,
+                marginBottom: 14,
+                lineHeight: 1.25,
+                wordBreak: "break-word",
+              }}
+            >
               รายการทั้งหมด
             </h2>
 
@@ -401,19 +451,45 @@ export default function OwnerRepairs() {
                         background: active ? "#FFF5F8" : "#FFFFFF",
                         padding: 16,
                         cursor: "pointer",
+                        width: "100%",
+                        boxSizing: "border-box",
                       }}
                     >
-                      <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          marginBottom: 6,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
                         {item.room.buildingName || item.room.buildingCode
                           ? `ตึก ${item.room.buildingName || item.room.buildingCode} ห้อง ${item.room.roomNumber}`
                           : `ห้อง ${item.room.roomNumber}`}
                       </div>
 
-                      <div style={{ color: "#4B5563", marginBottom: 6 }}>
+                      <div
+                        style={{
+                          color: "#4B5563",
+                          marginBottom: 6,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
                         ผู้เช่า: {item.tenant.fullName || "-"}
                       </div>
 
-                      <div style={{ color: "#4B5563", marginBottom: 10 }}>
+                      <div
+                        style={{
+                          color: "#4B5563",
+                          marginBottom: 10,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
                         {item.description}
                       </div>
 
@@ -451,17 +527,22 @@ export default function OwnerRepairs() {
             )}
           </div>
 
-          <div style={{ display: "grid", gap: 24 }}>
+          <div style={{ display: "grid", gap: isMobile ? 16 : 24, minWidth: 0 }}>
             <div
               style={{
-                background: "#FFFFFF",
-                borderRadius: 24,
-                padding: 24,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
-                minHeight: 340,
+                ...cardStyle,
+                minHeight: isMobile ? undefined : 340,
               }}
             >
-              <h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 18 }}>
+              <h2
+                style={{
+                  fontSize: isMobile ? 22 : 30,
+                  fontWeight: 700,
+                  marginBottom: 18,
+                  lineHeight: 1.25,
+                  wordBreak: "break-word",
+                }}
+              >
                 อัปเดตสถานะการซ่อม
               </h2>
 
@@ -472,14 +553,23 @@ export default function OwnerRepairs() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gridTemplateColumns: isMobile
+                        ? "1fr"
+                        : "repeat(2, minmax(0, 1fr))",
                       gap: 16,
                       marginBottom: 18,
                     }}
                   >
                     <div>
                       <div style={{ color: "#6B7280", marginBottom: 4 }}>ห้อง</div>
-                      <div style={{ fontWeight: 700 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
                         {selectedRepair.room.buildingName || selectedRepair.room.buildingCode
                           ? `ตึก ${selectedRepair.room.buildingName || selectedRepair.room.buildingCode} ห้อง ${selectedRepair.room.roomNumber}`
                           : `ห้อง ${selectedRepair.room.roomNumber}`}
@@ -488,21 +578,42 @@ export default function OwnerRepairs() {
 
                     <div>
                       <div style={{ color: "#6B7280", marginBottom: 4 }}>ผู้เช่า</div>
-                      <div style={{ fontWeight: 700 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
                         {selectedRepair.tenant.fullName || "-"}
                       </div>
                     </div>
 
                     <div>
                       <div style={{ color: "#6B7280", marginBottom: 4 }}>เฟอร์นิเจอร์</div>
-                      <div style={{ fontWeight: 700 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
                         {selectedRepair.furniture?.itemName || "-"}
                       </div>
                     </div>
 
                     <div>
                       <div style={{ color: "#6B7280", marginBottom: 4 }}>หมวดหมู่</div>
-                      <div style={{ fontWeight: 700 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
                         {getCategoryLabel(selectedRepair.category)}
                       </div>
                     </div>
@@ -511,7 +622,14 @@ export default function OwnerRepairs() {
                       <div style={{ color: "#6B7280", marginBottom: 4 }}>
                         ความเร่งด่วน
                       </div>
-                      <div style={{ fontWeight: 700 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
                         {getPriorityLabel(selectedRepair.priority)}
                       </div>
                     </div>
@@ -537,7 +655,14 @@ export default function OwnerRepairs() {
 
                   <div style={{ marginBottom: 18 }}>
                     <div style={{ color: "#6B7280", marginBottom: 6 }}>ปัญหา</div>
-                    <div style={{ fontWeight: 700, lineHeight: 1.7 }}>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        lineHeight: 1.7,
+                        wordBreak: "break-word",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
                       {selectedRepair.description}
                     </div>
                   </div>
@@ -562,6 +687,7 @@ export default function OwnerRepairs() {
                         padding: "0 14px",
                         fontSize: 15,
                         background: isClosed ? "#F3F4F6" : "#FFFFFF",
+                        boxSizing: "border-box",
                       }}
                     >
                       {statusOptions.map((item) => (
@@ -594,6 +720,9 @@ export default function OwnerRepairs() {
                         fontSize: 15,
                         resize: "vertical",
                         background: isClosed ? "#F3F4F6" : "#FFFFFF",
+                        boxSizing: "border-box",
+                        fontFamily: "inherit",
+                        lineHeight: 1.5,
                       }}
                     />
                   </div>
@@ -620,6 +749,9 @@ export default function OwnerRepairs() {
                         fontSize: 15,
                         resize: "vertical",
                         background: isClosed ? "#F3F4F6" : "#FFFFFF",
+                        boxSizing: "border-box",
+                        fontFamily: "inherit",
+                        lineHeight: 1.5,
                       }}
                     />
                   </div>
@@ -647,10 +779,18 @@ export default function OwnerRepairs() {
                         padding: 12,
                         fontSize: 14,
                         background: isClosed ? "#F3F4F6" : "#FFFFFF",
+                        boxSizing: "border-box",
                       }}
                     />
 
-                    <div style={{ marginTop: 8, color: "#6B7280", fontSize: 13 }}>
+                    <div
+                      style={{
+                        marginTop: 8,
+                        color: "#6B7280",
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                      }}
+                    >
                       อัปโหลดได้หลายรูป รองรับเฉพาะไฟล์รูปภาพ
                     </div>
 
@@ -658,7 +798,9 @@ export default function OwnerRepairs() {
                       <div
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                          gridTemplateColumns: isMobile
+                            ? "repeat(2, minmax(0, 1fr))"
+                            : "repeat(3, minmax(0, 1fr))",
                           gap: 12,
                           marginTop: 14,
                         }}
@@ -670,10 +812,11 @@ export default function OwnerRepairs() {
                             alt={`after-preview-${index + 1}`}
                             style={{
                               width: "100%",
-                              height: 140,
+                              height: isMobile ? 110 : 140,
                               objectFit: "cover",
                               borderRadius: 16,
                               border: "1px solid #E5E7EB",
+                              display: "block",
                             }}
                           />
                         ))}
@@ -681,7 +824,12 @@ export default function OwnerRepairs() {
                     ) : null}
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: isMobile ? "stretch" : "flex-end",
+                    }}
+                  >
                     <button
                       type="button"
                       onClick={handleUpdateRepair}
@@ -691,11 +839,12 @@ export default function OwnerRepairs() {
                         borderRadius: 12,
                         background: "#F63D7A",
                         color: "#FFFFFF",
-                        padding: "12px 20px",
+                        padding: isMobile ? "13px 18px" : "12px 20px",
                         fontSize: 15,
                         fontWeight: 700,
                         cursor: submitting || isClosed ? "not-allowed" : "pointer",
                         opacity: submitting || isClosed ? 0.7 : 1,
+                        width: isMobile ? "100%" : "auto",
                       }}
                     >
                       {submitting ? "กำลังบันทึก..." : "บันทึกการอัปเดต"}
@@ -708,7 +857,8 @@ export default function OwnerRepairs() {
                         marginTop: 12,
                         color: "#6B7280",
                         fontSize: 14,
-                        textAlign: "right",
+                        textAlign: isMobile ? "left" : "right",
+                        lineHeight: 1.5,
                       }}
                     >
                       รายการนี้ปิดงานแล้ว ไม่สามารถอัปเดตต่อได้
@@ -722,13 +872,18 @@ export default function OwnerRepairs() {
 
             <div
               style={{
-                background: "#FFFFFF",
-                borderRadius: 24,
-                padding: 24,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+                ...cardStyle,
               }}
             >
-              <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 16 }}>
+              <h2
+                style={{
+                  fontSize: isMobile ? 22 : 28,
+                  fontWeight: 700,
+                  marginBottom: 16,
+                  lineHeight: 1.25,
+                  wordBreak: "break-word",
+                }}
+              >
                 รายละเอียดการแจ้งซ่อม
               </h2>
 
@@ -737,21 +892,37 @@ export default function OwnerRepairs() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gridTemplateColumns: isMobile
+                        ? "1fr"
+                        : "repeat(2, minmax(0, 1fr))",
                       gap: 16,
                       marginBottom: 18,
                     }}
                   >
                     <div>
                       <div style={{ color: "#6B7280", marginBottom: 4 }}>วันที่แจ้ง</div>
-                      <div style={{ fontWeight: 700 }}>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                        }}
+                      >
                         {formatThaiDateTime(selectedRepair.requestedAt)}
                       </div>
                     </div>
 
                     <div>
-                      <div style={{ color: "#6B7280", marginBottom: 4 }}>อัปเดตล่าสุด</div>
-                      <div style={{ fontWeight: 700 }}>
+                      <div style={{ color: "#6B7280", marginBottom: 4 }}>
+                        อัปเดตล่าสุด
+                      </div>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          lineHeight: 1.5,
+                          wordBreak: "break-word",
+                        }}
+                      >
                         {formatThaiDateTime(selectedRepair.updatedAt)}
                       </div>
                     </div>
@@ -763,7 +934,9 @@ export default function OwnerRepairs() {
                       <div
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                          gridTemplateColumns: isMobile
+                            ? "1fr"
+                            : "repeat(2, minmax(0, 1fr))",
                           gap: 12,
                         }}
                       >
@@ -777,6 +950,7 @@ export default function OwnerRepairs() {
                               height: 180,
                               objectFit: "cover",
                               borderRadius: 16,
+                              display: "block",
                             }}
                           />
                         ))}
@@ -790,7 +964,9 @@ export default function OwnerRepairs() {
                       <div
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                          gridTemplateColumns: isMobile
+                            ? "1fr"
+                            : "repeat(2, minmax(0, 1fr))",
                           gap: 12,
                         }}
                       >
@@ -804,6 +980,7 @@ export default function OwnerRepairs() {
                               height: 180,
                               objectFit: "cover",
                               borderRadius: 16,
+                              display: "block",
                             }}
                           />
                         ))}
@@ -819,24 +996,34 @@ export default function OwnerRepairs() {
 
           <div
             style={{
-              background: "#FFFFFF",
-              borderRadius: 24,
-              padding: 24,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
-              minHeight: 640,
+              ...cardStyle,
+              minHeight: isMobile ? undefined : 640,
             }}
           >
-            <h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 16 }}>
+            <h2
+              style={{
+                fontSize: isMobile ? 22 : 30,
+                fontWeight: 700,
+                marginBottom: 16,
+                lineHeight: 1.25,
+                wordBreak: "break-word",
+              }}
+            >
               สถานะงาน
             </h2>
 
             {selectedRepair ? (
               <>
                 <div style={{ marginBottom: 18 }}>
-                  <div style={{ color: "#6B7280", marginBottom: 4 }}>
-                    รายการที่เลือก
-                  </div>
-                  <div style={{ fontWeight: 700, lineHeight: 1.7 }}>
+                  <div style={{ color: "#6B7280", marginBottom: 4 }}>รายการที่เลือก</div>
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      lineHeight: 1.7,
+                      wordBreak: "break-word",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
                     {selectedRepair.room.buildingName || selectedRepair.room.buildingCode
                       ? `ตึก ${selectedRepair.room.buildingName || selectedRepair.room.buildingCode} ห้อง ${selectedRepair.room.roomNumber}`
                       : `ห้อง ${selectedRepair.room.roomNumber}`}
@@ -853,10 +1040,24 @@ export default function OwnerRepairs() {
                         <div style={{ color: "#6B7280", fontSize: 14 }}>
                           {formatThaiDate(log.changedAt)}
                         </div>
-                        <div style={{ fontWeight: 700, color: style.color }}>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            color: style.color,
+                            wordBreak: "break-word",
+                          }}
+                        >
                           • {getStatusLabel(log.newStatus)}
                         </div>
-                        <div style={{ color: "#4B5563" }}>{log.note || "-"}</div>
+                        <div
+                          style={{
+                            color: "#4B5563",
+                            wordBreak: "break-word",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {log.note || "-"}
+                        </div>
                       </div>
                     );
                   })}

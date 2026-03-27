@@ -90,11 +90,7 @@ function TrashIcon() {
 }
 
 function formatRoomLabel(tenant: TenantItem) {
-  const building =
-    tenant.building_code ||
-    tenant.building_name ||
-    "-";
-
+  const building = tenant.building_code || tenant.building_name || "-";
   const room = tenant.room_number || "-";
 
   if (building === "-" && room === "-") return "-";
@@ -185,10 +181,8 @@ export default function Tenants() {
       setEndingId(null);
     }
   }
-  async function handleUploadContractFile(
-    contractId: string | null,
-    file: File | null
-  ) {
+
+  async function handleUploadContractFile(contractId: string | null, file: File | null) {
     if (!contractId || !file) return;
 
     try {
@@ -210,199 +204,284 @@ export default function Tenants() {
     }
   }
 
-
   return (
-  <div className="min-h-screen bg-[#F9F9F9] px-6 py-8">
-    <div className="mx-auto max-w-6xl">
-      <div className="mb-10 flex items-start justify-between">
-        <div className="rounded-2xl bg-white px-5 py-4 shadow-sm">
-          <div className="flex items-center gap-2 text-pink-600">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-              <path d="M16 11c1.66 0 2.99-1.57 2.99-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 2.99-1.57 2.99-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.96 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z" />
-            </svg>
-            <div className="flex items-baseline gap-3">
-              <span className="text-[28px] font-bold">ผู้เช่าทั้งหมด</span>
-              <span className="text-sm font-medium text-pink-500">
-                จำนวน <span className="text-[20px] font-bold">{tenantCount}</span> คน
-              </span>
+    <div className="min-h-screen bg-[#F9F9F9] px-3 py-5 sm:px-6 sm:py-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-start sm:justify-between">
+          <div className="rounded-2xl bg-white px-4 py-4 shadow-sm sm:px-5">
+            <div className="flex items-start gap-2 text-pink-600">
+              <svg viewBox="0 0 24 24" className="mt-1 h-5 w-5 shrink-0" fill="currentColor">
+                <path d="M16 11c1.66 0 2.99-1.57 2.99-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 2.99-1.57 2.99-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.96 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z" />
+              </svg>
+
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:gap-3">
+                <span className="text-2xl font-bold leading-tight sm:text-[28px]">
+                  ผู้เช่าทั้งหมด
+                </span>
+                <span className="text-sm font-medium text-pink-500">
+                  จำนวน <span className="text-lg font-bold sm:text-[20px]">{tenantCount}</span> คน
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <button
-          onClick={() => setOpenAddTenant(true)}
-          className="rounded-md bg-[#F63B74] px-5 py-2.5 text-sm font-semibold text-white shadow hover:opacity-95"
-        >
-          เพิ่มผู้เช่าใหม่ +
-        </button>
-      </div>
-
-      <div className="rounded-[28px] bg-[#FFFFFF] p-7 shadow-sm">
-        <h2 className="mb-4 text-[24px] font-extrabold text-[#222]">
-          รายชื่อผู้เช่าทั้งหมด
-        </h2>
-
-        <div className="mb-5 flex items-center gap-3">
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setPage(1);
-                setSearch(searchInput);
-              }
-            }}
-            placeholder="ค้นหาห้อง/ค้นหาคน"
-            className="h-10 w-[170px] rounded border border-[#e3d4db] bg-white px-3 text-sm outline-none"
-          />
           <button
-            onClick={() => {
-              setPage(1);
-              setSearch(searchInput);
-            }}
-            className="h-10 rounded bg-[#F63B74] px-4 text-sm font-medium text-white"
+            onClick={() => setOpenAddTenant(true)}
+            className="w-full rounded-lg bg-[#F63B74] px-5 py-3 text-sm font-semibold text-white shadow hover:opacity-95 sm:w-auto sm:rounded-md sm:py-2.5"
           >
-            ค้นหา
+            เพิ่มผู้เช่าใหม่ +
           </button>
         </div>
 
-        {loading ? (
-          <div className="py-10 text-sm text-gray-500">กำลังโหลดข้อมูล...</div>
-        ) : tenants.length === 0 ? (
-          <div className="py-10 text-sm text-gray-500">ยังไม่มีข้อมูลผู้เช่า</div>
-        ) : (
-          <>
-            <div className="overflow-hidden rounded-lg border border-[#ead6de] bg-white">
-              <table className="min-w-full border-collapse text-center text-sm">
-                <thead>
-                  <tr>
-                    <th className="bg-[#f8dde6] px-4 py-3 font-semibold text-[#333]">
-                      ห้อง
-                    </th>
-                    <th className="bg-[#f1608d] px-4 py-3 font-semibold text-white">
-                      ผู้เช่า
-                    </th>
-                    <th className="bg-[#f1d6df] px-4 py-3 font-semibold text-[#333]">
-                      เบอร์โทรศัพท์
-                    </th>
-                    <th className="bg-[#f1608d] px-4 py-3 font-semibold text-white">
-                      จัดการ
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tenants.map((tenant, index) => {
-                    const fileUrl = toAbsoluteFileUrl(tenant.contract_file_path);
-                    const roomLabel = `${tenant.building_code || tenant.building_name || "-"} / ${tenant.room_number || "-"}`;
+        <div className="rounded-[24px] bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-7">
+          <h2 className="mb-4 text-2xl font-extrabold text-[#222] sm:text-[24px]">
+            รายชื่อผู้เช่าทั้งหมด
+          </h2>
 
-                    return (
-                      <tr
-                        key={tenant.tenant_user_id || index}
-                        className="border-t border-[#ead6de]"
-                      >
-                        <td className="bg-white px-4 py-4 font-semibold text-[#222]">
-                          {roomLabel}
-                        </td>
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  setPage(1);
+                  setSearch(searchInput);
+                }
+              }}
+              placeholder="ค้นหาห้อง/ค้นหาคน"
+              className="h-11 w-full rounded-lg border border-[#e3d4db] bg-white px-3 text-sm outline-none sm:h-10 sm:w-[220px] sm:rounded"
+            />
+            <button
+              onClick={() => {
+                setPage(1);
+                setSearch(searchInput);
+              }}
+              className="h-11 w-full rounded-lg bg-[#F63B74] px-4 text-sm font-medium text-white sm:h-10 sm:w-auto sm:rounded"
+            >
+              ค้นหา
+            </button>
+          </div>
 
-                        <td className="bg-[#f8e3ea] px-4 py-4 text-[#222]">
-                          <div>{tenant.full_name || "-"}</div>
-                          <div className="mt-1 text-xs text-[#666]">
+          {loading ? (
+            <div className="py-10 text-sm text-gray-500">กำลังโหลดข้อมูล...</div>
+          ) : tenants.length === 0 ? (
+            <div className="py-10 text-sm text-gray-500">ยังไม่มีข้อมูลผู้เช่า</div>
+          ) : (
+            <>
+              <div className="hidden overflow-hidden rounded-lg border border-[#ead6de] bg-white md:block">
+                <table className="min-w-full border-collapse text-center text-sm">
+                  <thead>
+                    <tr>
+                      <th className="bg-[#f8dde6] px-4 py-3 font-semibold text-[#333]">ห้อง</th>
+                      <th className="bg-[#f1608d] px-4 py-3 font-semibold text-white">ผู้เช่า</th>
+                      <th className="bg-[#f1d6df] px-4 py-3 font-semibold text-[#333]">
+                        เบอร์โทรศัพท์
+                      </th>
+                      <th className="bg-[#f1608d] px-4 py-3 font-semibold text-white">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tenants.map((tenant, index) => {
+                      const fileUrl = toAbsoluteFileUrl(tenant.contract_file_path);
+                      const roomLabel = formatRoomLabel(tenant);
+
+                      return (
+                        <tr
+                          key={tenant.tenant_user_id || index}
+                          className="border-t border-[#ead6de]"
+                        >
+                          <td className="bg-white px-4 py-4 font-semibold text-[#222]">
+                            {roomLabel}
+                          </td>
+
+                          <td className="bg-[#f8e3ea] px-4 py-4 text-[#222]">
+                            <div>{tenant.full_name || "-"}</div>
+                            <div className="mt-1 text-xs text-[#666]">
+                              {tenant.username || "-"}
+                            </div>
+                            {fileUrl && (
+                              <a
+                                href={fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-1 inline-block text-xs text-pink-600 underline"
+                              >
+                                ดูไฟล์สัญญา
+                              </a>
+                            )}
+                          </td>
+
+                          <td className="bg-white px-4 py-4 text-[#222]">
+                            {tenant.phone || "-"}
+                          </td>
+
+                          <td className="bg-[#f8e3ea] px-4 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <label className="cursor-pointer rounded bg-[#4da3ff] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
+                                {uploadingContractId === tenant.contract_id
+                                  ? "กำลังอัป..."
+                                  : "อัปไฟล์"}
+                                <input
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] || null;
+                                    handleUploadContractFile(tenant.contract_id, file);
+                                    e.currentTarget.value = "";
+                                  }}
+                                  disabled={
+                                    !tenant.contract_id ||
+                                    uploadingContractId === tenant.contract_id
+                                  }
+                                />
+                              </label>
+
+                              <button
+                                type="button"
+                                onClick={() => handleEndContract(tenant.contract_id)}
+                                disabled={
+                                  !tenant.contract_id || endingId === tenant.contract_id
+                                }
+                                className="inline-flex items-center justify-center rounded bg-[#ffe5e8] px-3 py-1.5 text-[#c91c23] disabled:opacity-40"
+                                title="จบสัญญา"
+                              >
+                                <TrashIcon />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-3 md:hidden">
+                {tenants.map((tenant, index) => {
+                  const fileUrl = toAbsoluteFileUrl(tenant.contract_file_path);
+                  const roomLabel = formatRoomLabel(tenant);
+
+                  return (
+                    <div
+                      key={tenant.tenant_user_id || index}
+                      className="rounded-2xl border border-[#ead6de] bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-base font-extrabold text-[#222]">{roomLabel}</div>
+                          <div className="mt-1 break-words text-sm font-semibold text-[#333]">
+                            {tenant.full_name || "-"}
+                          </div>
+                          <div className="mt-1 break-words text-xs text-[#666]">
                             {tenant.username || "-"}
                           </div>
-                          {fileUrl && (
+                        </div>
+
+                        <span className="shrink-0 rounded-full bg-[#f8e3ea] px-3 py-1 text-xs font-semibold text-[#F63B74]">
+                          ผู้เช่า
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 rounded-2xl bg-[#fff6f8] p-3">
+                        <div>
+                          <div className="text-xs text-[#888]">เบอร์โทรศัพท์</div>
+                          <div className="mt-1 break-words text-sm font-semibold text-[#222]">
+                            {tenant.phone || "-"}
+                          </div>
+                        </div>
+
+                        {fileUrl ? (
+                          <div>
+                            <div className="text-xs text-[#888]">ไฟล์สัญญา</div>
                             <a
                               href={fileUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="mt-1 inline-block text-xs text-pink-600 underline"
+                              className="mt-1 inline-block text-sm font-medium text-pink-600 underline"
                             >
                               ดูไฟล์สัญญา
                             </a>
-                          )}
-                        </td>
-
-                        <td className="bg-white px-4 py-4 text-[#222]">
-                          {tenant.phone || "-"}
-                        </td>
-
-                        <td className="bg-[#f8e3ea] px-4 py-4">
-                          <div className="flex items-center justify-center gap-2">
-                            <label className="cursor-pointer rounded bg-[#4da3ff] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
-                              {uploadingContractId === tenant.contract_id ? "กำลังอัป..." : "อัปไฟล์"}
-                              <input
-                                type="file"
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0] || null;
-                                  handleUploadContractFile(tenant.contract_id, file);
-                                  e.currentTarget.value = "";
-                                }}
-                                disabled={!tenant.contract_id || uploadingContractId === tenant.contract_id}
-                              />
-                            </label>
-
-                            <button
-                              type="button"
-                              onClick={() => handleEndContract(tenant.contract_id)}
-                              disabled={!tenant.contract_id || endingId === tenant.contract_id}
-                              className="inline-flex items-center justify-center rounded bg-[#ffe5e8] px-3 py-1.5 text-[#c91c23] disabled:opacity-40"
-                              title="จบสัญญา"
-                            >
-                              <TrashIcon />
-                            </button>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        ) : null}
+                      </div>
 
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                แสดง {meta.start}-{meta.end} จากทั้งหมด {meta.total} รายการ
+                      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <label className="flex h-11 cursor-pointer items-center justify-center rounded-lg bg-[#4da3ff] px-3 text-sm font-medium text-white hover:opacity-90">
+                          {uploadingContractId === tenant.contract_id ? "กำลังอัป..." : "อัปไฟล์"}
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null;
+                              handleUploadContractFile(tenant.contract_id, file);
+                              e.currentTarget.value = "";
+                            }}
+                            disabled={
+                              !tenant.contract_id || uploadingContractId === tenant.contract_id
+                            }
+                          />
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEndContract(tenant.contract_id)}
+                          disabled={!tenant.contract_id || endingId === tenant.contract_id}
+                          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#ffe5e8] px-3 text-sm font-medium text-[#c91c23] disabled:opacity-40"
+                        >
+                          <TrashIcon />
+                          จบสัญญา
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                  disabled={page <= 1}
-                  className="rounded border border-[#e2d4da] bg-white px-3 py-1.5 text-sm disabled:opacity-50"
-                >
-                  ← ซ้าย
-                </button>
-
-                <div className="text-sm text-gray-700">
-                  หน้า {meta.page} / {meta.totalPages || 1}
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-gray-600">
+                  แสดง {meta.start}-{meta.end} จากทั้งหมด {meta.total} รายการ
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.min(p + 1, meta.totalPages || 1))}
-                  disabled={page >= (meta.totalPages || 1)}
-                  className="rounded border border-[#e2d4da] bg-white px-3 py-1.5 text-sm disabled:opacity-50"
-                >
-                  ขวา →
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                    disabled={page <= 1}
+                    className="rounded-lg border border-[#e2d4da] bg-white px-3 py-2 text-sm disabled:opacity-50"
+                  >
+                    ← ซ้าย
+                  </button>
 
-    <AddTenantModal
-      open={openAddTenant}
-      onClose={() => setOpenAddTenant(false)}
-      onCreated={() => {
-        setOpenAddTenant(false);
-        setPage(1);
-        setRefreshKey((n) => n + 1);
-      }}
-    />
-  </div>
-);
+                  <div className="text-center text-sm text-gray-700">
+                    หน้า {meta.page} / {meta.totalPages || 1}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(p + 1, meta.totalPages || 1))}
+                    disabled={page >= (meta.totalPages || 1)}
+                    className="rounded-lg border border-[#e2d4da] bg-white px-3 py-2 text-sm disabled:opacity-50"
+                  >
+                    ขวา →
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <AddTenantModal
+        open={openAddTenant}
+        onClose={() => setOpenAddTenant(false)}
+        onCreated={() => {
+          setOpenAddTenant(false);
+          setPage(1);
+          setRefreshKey((n) => n + 1);
+        }}
+      />
+    </div>
+  );
 }
