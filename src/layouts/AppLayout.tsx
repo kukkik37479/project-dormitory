@@ -49,12 +49,13 @@ export default function AppLayout() {
     }
   }, []);
 
-  const role = (storedUser?.role || "tenant") as AppRole;
+  const role: AppRole = storedUser?.role ?? "admin";
 
   const avatarSrc = getAvatarByRoleAndGender({
-  role: storedUser?.role,
-  gender: storedUser?.gender,
-});
+    role: storedUser?.role,
+    gender: storedUser?.gender,
+  });
+
   const displayName =
     storedUser?.full_name ||
     storedUser?.username ||
@@ -63,18 +64,18 @@ export default function AppLayout() {
 
   const dormName = storedUser?.dorm_name || "ชื่อหอพัก";
 
-  const sidebarTitle = role === "owner" || role === "tenant" ? dormName : "Roomie";
-  const headerTitle = role === "owner" || role === "tenant" ? dormName : displayName;
+  const sidebarTitle =
+    role === "owner" || role === "tenant" ? dormName : "Roomie";
+  const headerTitle =
+    role === "owner" || role === "tenant" ? dormName : displayName;
 
   return (
     <div className="min-h-screen flex bg-gray-50 font-sans">
-      {/* ================= Sidebar (Desktop) ================= */}
       <aside className="hidden md:flex md:w-72 md:flex-col bg-white shadow-sm">
         <Brand title={sidebarTitle} onClose={undefined} />
         <Nav role={role} onNavigate={() => {}} />
       </aside>
 
-      {/* ================= Sidebar (Mobile) ================= */}
       <div
         className={`fixed inset-0 z-40 md:hidden ${
           open ? "" : "pointer-events-none"
@@ -97,7 +98,6 @@ export default function AppLayout() {
         </aside>
       </div>
 
-      {/* ================= Main ================= */}
       <main className="flex flex-1 flex-col min-w-0">
         <header
           className="
@@ -154,11 +154,7 @@ function Brand({
   return (
     <div className="flex h-24 items-center justify-between px-6">
       <div className="flex items-center gap-4">
-        <img
-          src={logoImg}
-          alt="logo"
-          className="h-16 w-16 object-contain"
-        />
+        <img src={logoImg} alt="logo" className="h-16 w-16 object-contain" />
 
         <div className="flex flex-col">
           <span className="text-lg font-extrabold leading-tight text-gray-800 line-clamp-2">
@@ -195,7 +191,7 @@ function Nav({
       : base;
 
   const ownerMenus = [
-    { to: "/explore", label: "หน้าแรก", icon: <FiHome size={22} /> },
+    { to: "/home", label: "หน้าแรก", icon: <FiHome size={22} /> },
     { to: "/my-dorm", label: "หอของฉัน", icon: <MdOutlineApartment size={22} /> },
     { to: "/rooms", label: "ห้องพัก", icon: <FiBox size={22} /> },
     {
@@ -213,7 +209,7 @@ function Nav({
   ];
 
   const tenantMenus = [
-    { to: "/explore", label: "หน้าแรก", icon: <FiHome size={22} /> },
+    { to: "/home", label: "หน้าแรก", icon: <FiHome size={22} /> },
     { to: "/my-room", label: "ห้องของฉัน", icon: <MdOutlineApartment size={22} /> },
     {
       to: "/announcements-chat",
@@ -225,7 +221,7 @@ function Nav({
   ];
 
   const adminMenus = [
-    { to: "/explore", label: "หน้าแรก", icon: <FiHome size={22} /> },
+    { to: "/home", label: "หน้าแรก", icon: <FiHome size={22} /> },
   ];
 
   const menus =
@@ -245,7 +241,7 @@ function Nav({
         <NavLink
           key={item.to}
           to={item.to}
-          end={item.to === "/explore"}
+          end={item.to === "/home"}
           className={active}
           onClick={onNavigate}
         >

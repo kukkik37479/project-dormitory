@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout";
 import Homepage from "./pages/Homepage";
 import Login from "./pages/Login";
@@ -7,6 +7,7 @@ import Rooms from "./pages/Rooms";
 import RoomDetail from "./pages/RoomDetail";
 import Explore from "./pages/Explore";
 import DormPublic from "./pages/DormPublic";
+import RoomPublicDetail from "./pages/RoomPublicDetail";
 import OwnerRepairs from "./pages/OwnerRepairs";
 import TenantRepair from "./pages/TenantRepair";
 import BillsGateway from "./pages/BillsGateway";
@@ -20,9 +21,14 @@ import MyDorm from "./pages/MyDorm";
 import TestMap from "./pages/TestMap";
 import MyRoom from "./pages/MyRoom";
 import AnnouncementsChat from "./pages/AnnouncementsChat";
+import Reviews from "./pages/Reviews";
 
 function TempPage({ title }: { title: string }) {
   return <div className="p-6 text-xl font-semibold">{title}</div>;
+}
+
+function PublicLayout() {
+  return <Outlet />;
 }
 
 function decodeBase64Url(value: string) {
@@ -64,16 +70,30 @@ function RepairsPageSwitch() {
 }
 
 const router = createBrowserRouter([
-  { path: "/login", element: <Login /> },
-  { path: "/sign", element: <Sign /> },
-  { path: "/", element: <Homepage /> },
+  {
+    path: "/",
+    element: <PublicLayout />,
+    children: [
+      { index: true, element: <Homepage /> },
+      { path: "explore", element: <Explore /> },
+      { path: "dorms/:dormId", element: <DormPublic /> },
+      { path: "public/rooms/:roomId", element: <RoomPublicDetail /> },
+      { path: "login", element: <Login /> },
+      { path: "sign", element: <Sign /> },
+    ],
+  },
   {
     path: "/",
     element: <AppLayout />,
     children: [
-      { index: true, element: <Navigate to="/explore" replace /> },
-      { path: "explore", element: <Explore /> },
-      { path: "public", element: <DormPublic /> },
+      {
+        path: "home",
+        element: (
+          <RequireRole allow={["owner", "tenant", "admin"]}>
+            <Explore />
+          </RequireRole>
+        ),
+      },
       {
         path: "profile",
         element: (
@@ -162,7 +182,7 @@ const router = createBrowserRouter([
         path: "reviews",
         element: (
           <RequireRole allow={["owner"]}>
-            <TempPage title="รีวิว" />
+            <Reviews />
           </RequireRole>
         ),
       },
@@ -198,9 +218,9 @@ const router = createBrowserRouter([
           </RequireRole>
         ),
       },
-      { path: "*", element: <Navigate to="/explore" replace /> },
     ],
   },
+  { path: "*", element: <Navigate to="/" replace /> },
 ]);
 
 export default router;

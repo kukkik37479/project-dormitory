@@ -65,14 +65,10 @@ export default function Login() {
 
       const role = data.user?.role;
 
-      if (role === "owner") {
-        nav("/explore");
-      } else if (role === "tenant") {
-        nav("/explore");
-      } else if (role === "admin") {
-        nav("/explore");
+      if (role === "owner" || role === "tenant" || role === "admin") {
+        nav("/home", { replace: true });
       } else {
-        nav("/");
+        nav("/", { replace: true });
       }
     } catch (error) {
       setErr("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
