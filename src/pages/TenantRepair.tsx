@@ -1,0 +1,756 @@
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  cancelMyRepairRequest,
+  createRepairRequest,
+  getMyRepairRequestDetail,
+  getMyRepairRequests,
+  getTenantRepairFormOptions,
+} from "../service/repair.service";
+import { uploadRepairImages } from "../service/repairUpload.service";
+import type {
+  RepairCategoryValue,
+  RepairPriorityValue,
+  RepairRequestItem,
+  RepairStatusValue,
+  TenantRepairFormOptions,
+} from "../service/repair.service";
+
+function formatThaiDate(date?: string | null) {
+  if (!date) return "-";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("th-TH", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(parsed);
+}
+
+function formatThaiDateTime(date?: string | null) {
+  if (!date) return "-";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("th-TH", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+function getStatusLabel(status: RepairStatusValue) {
+  switch (status) {
+    case "pending":
+      return "รอรับเรื่อง";
+    case "in_progress":
+      return "กำลังดำเนินการ";
+    case "waiting_parts":
+      return "รออะไหล่";
+    case "completed":
+      return "เสร็จสิ้น";
+    case "cancelled":
+      return "ยกเลิก";
+    default:
+      return status;
+  }
+}
+
+function getStatusColor(status: RepairStatusValue) {
+  switch (status) {
+    case "pending":
+      return { background: "#FFF3CD", color: "#8A6D1D" };
+    case "in_progress":
+      return { background: "#D1F3D8", color: "#1C7C35" };
+    case "waiting_parts":
+      return { background: "#E5E7EB", color: "#4B5563" };
+    case "completed":
+      return { background: "#D9F7E8", color: "#0F8F4F" };
+    case "cancelled":
+      return { background: "#FDE2E2", color: "#C0392B" };
+    default:
+      return { background: "#E5E7EB", color: "#374151" };
+  }
+}
+
+function getCategoryLabel(value: RepairCategoryValue) {
+  switch (value) {
+    case "electrical":
+      return "เครื่องใช้ไฟฟ้า";
+    case "water":
+      return "ระบบน้ำ";
+    case "furniture":
+      return "เฟอร์นิเจอร์";
+    case "room":
+      return "ภายในห้อง";
+    case "other":
+      return "อื่น ๆ";
+    default:
+      return value;
+  }
+}
+
+function getPriorityLabel(value: RepairPriorityValue) {
+  switch (value) {
+    case "low":
+      return "ต่ำ";
+    case "medium":
+      return "ปานกลาง";
+    case "high":
+      return "สูง";
+    case "urgent":
+      return "เร่งด่วน";
+    default:
+      return value;
+  }
+}
+
+export default function TenantRepair() {
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  const [formOptions, setFormOptions] = useState<TenantRepairFormOptions | null>(null);
+  const [repairList, setRepairList] = useState<RepairRequestItem[]>([]);
+  const [selectedRepairId, setSelectedRepairId] = useState<string>("");
+  const [selectedRepair, setSelectedRepair] = useState<RepairRequestItem | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const [category, setCategory] = useState<RepairCategoryValue>("furniture");
+  const [priority, setPriority] = useState<RepairPriorityValue>("medium");
+  const [furnitureItemId, setFurnitureItemId] = useState("");
+  const [description, setDescription] = useState("");
+  const [beforeFiles, setBeforeFiles] = useState<File[]>([]);
+  const [beforePreviewUrls, setBeforePreviewUrls] = useState<string[]>([]);
+  const [fileInputKey, setFileInputKey] = useState(0);
+
+  const selectedStatusStyle = useMemo(() => {
+    if (!selectedRepair) {
+      return { background: "#E5E7EB", color: "#374151" };
+    }
+    return getStatusColor(selectedRepair.status);
+  }, [selectedRepair]);
+
+  useEffect(() => {
+    if (beforeFiles.length === 0) {
+      setBeforePreviewUrls([]);
+      return;
+    }
+
+    const nextUrls = beforeFiles.map((file) => URL.createObjectURL(file));
+    setBeforePreviewUrls(nextUrls);
+
+    return () => {
+      nextUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [beforeFiles]);
+
+  async function loadInitialData() {
+    try {
+      setLoadingPage(true);
+      setErrorMessage("");
+
+      const [options, repairs] = await Promise.all([
+        getTenantRepairFormOptions(),
+        getMyRepairRequests({ page: 1, limit: 50 }),
+      ]);
+
+      setFormOptions(options);
+      setRepairList(repairs.data || []);
+
+      if ((options.categories || []).length > 0) {
+        setCategory(options.categories[0].value);
+      }
+
+      if ((options.priorities || []).length > 0) {
+        setPriority(options.priorities[1]?.value || options.priorities[0].value);
+      }
+
+      if ((options.furniture || []).length > 0) {
+        setFurnitureItemId(options.furniture[0].id);
+      }
+
+      if ((repairs.data || []).length > 0) {
+        setSelectedRepairId(repairs.data[0].id);
+      }
+    } catch (error: any) {
+      setErrorMessage(error?.message || "โหลดข้อมูลแจ้งซ่อมไม่สำเร็จ");
+    } finally {
+      setLoadingPage(false);
+    }
+  }
+
+  async function loadRepairDetail(repairRequestId: string) {
+    try {
+      setLoadingDetail(true);
+      const detail = await getMyRepairRequestDetail(repairRequestId);
+      setSelectedRepair(detail);
+    } catch (error: any) {
+      setErrorMessage(error?.message || "โหลดรายละเอียดแจ้งซ่อมไม่สำเร็จ");
+    } finally {
+      setLoadingDetail(false);
+    }
+  }
+
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRepairId) {
+      setSelectedRepair(null);
+      return;
+    }
+
+    loadRepairDetail(selectedRepairId);
+  }, [selectedRepairId]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!description.trim()) {
+      window.alert("กรุณาระบุปัญหาที่ต้องการแจ้งซ่อม");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setErrorMessage("");
+
+      const beforeImageUrls = await uploadRepairImages(beforeFiles, "before");
+
+      const created = await createRepairRequest({
+        category,
+        priority,
+        description: description.trim(),
+        furniture_item_id: furnitureItemId || null,
+        before_image_urls: beforeImageUrls,
+      });
+
+      setDescription("");
+      setBeforeFiles([]);
+      setBeforePreviewUrls([]);
+      setFileInputKey((prev) => prev + 1);
+
+      const nextList = [created, ...repairList];
+      setRepairList(nextList);
+      setSelectedRepairId(created.id);
+      setSelectedRepair(created);
+
+      window.alert("สร้างรายการแจ้งซ่อมสำเร็จ");
+    } catch (error: any) {
+      window.alert(error?.message || "สร้างรายการแจ้งซ่อมไม่สำเร็จ");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleCancelSelectedRepair() {
+    if (!selectedRepair) return;
+    if (selectedRepair.status !== "pending") return;
+
+    const note = window.prompt("ระบุเหตุผลที่ต้องการยกเลิก", "ผู้เช่ายกเลิกรายการแจ้งซ่อม");
+    if (note === null) return;
+
+    try {
+      setCancelling(true);
+      const updated = await cancelMyRepairRequest(selectedRepair.id, { note });
+
+      setSelectedRepair(updated);
+      setRepairList((prev) =>
+        prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+      );
+
+      window.alert("ยกเลิกรายการแจ้งซ่อมสำเร็จ");
+    } catch (error: any) {
+      window.alert(error?.message || "ยกเลิกรายการแจ้งซ่อมไม่สำเร็จ");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  const roomLabel = useMemo(() => {
+    if (!formOptions?.room) return "-";
+    const building = formOptions.room.buildingName || formOptions.room.buildingCode;
+    return `${building ? `ตึก ${building} ` : ""}ห้อง ${formOptions.room.roomNumber}`;
+  }, [formOptions]);
+
+  return (
+    <div style={{ padding: 24, background: "#F7F7F8", minHeight: "100vh" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+        <h1 style={{ fontSize: 38, fontWeight: 700, marginBottom: 8 }}>แจ้งซ่อม</h1>
+        <p style={{ color: "#6B7280", marginBottom: 24 }}>
+          ห้องปัจจุบัน: {roomLabel}
+        </p>
+
+        {errorMessage ? (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: 12,
+              borderRadius: 12,
+              background: "#FDE2E2",
+              color: "#C0392B",
+            }}
+          >
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {loadingPage ? (
+          <div
+            style={{
+              padding: 24,
+              borderRadius: 20,
+              background: "#FFFFFF",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+            }}
+          >
+            กำลังโหลดข้อมูล...
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.2fr 1fr",
+              gap: 24,
+              alignItems: "start",
+            }}
+          >
+            <div
+              style={{
+                background: "#FFFFFF",
+                borderRadius: 24,
+                padding: 24,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+              }}
+            >
+              <h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 20 }}>
+                รายละเอียดการแจ้งซ่อม
+              </h2>
+
+              <form onSubmit={handleSubmit}>
+                <div style={{ marginBottom: 16 }}>
+                  <label
+                    htmlFor="repair-category"
+                    style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                  >
+                    หมวดหมู่
+                  </label>
+                  <select
+                    id="repair-category"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as RepairCategoryValue)}
+                    style={{
+                      width: "100%",
+                      height: 48,
+                      borderRadius: 12,
+                      border: "1px solid #E5E7EB",
+                      padding: "0 14px",
+                      fontSize: 15,
+                    }}
+                  >
+                    {(formOptions?.categories || []).map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label
+                    htmlFor="repair-priority"
+                    style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                  >
+                    ระดับความเร่งด่วน
+                  </label>
+                  <select
+                    id="repair-priority"
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value as RepairPriorityValue)}
+                    style={{
+                      width: "100%",
+                      height: 48,
+                      borderRadius: 12,
+                      border: "1px solid #E5E7EB",
+                      padding: "0 14px",
+                      fontSize: 15,
+                    }}
+                  >
+                    {(formOptions?.priorities || []).map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label
+                    htmlFor="repair-furniture"
+                    style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                  >
+                    เฟอร์นิเจอร์ในห้อง
+                  </label>
+                  <select
+                    id="repair-furniture"
+                    value={furnitureItemId}
+                    onChange={(e) => setFurnitureItemId(e.target.value)}
+                    style={{
+                      width: "100%",
+                      height: 48,
+                      borderRadius: 12,
+                      border: "1px solid #E5E7EB",
+                      padding: "0 14px",
+                      fontSize: 15,
+                    }}
+                  >
+                    <option value="">ไม่ระบุ</option>
+                    {(formOptions?.furniture || []).map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.itemName}
+                        {item.category?.name ? ` (${item.category.name})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label
+                    htmlFor="repair-description"
+                    style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                  >
+                    ระบุปัญหา
+                  </label>
+                  <textarea
+                    id="repair-description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="เช่น แอร์มีน้ำหยด ตู้เสื้อผ้าบานพับหลวม ก๊อกน้ำรั่ว"
+                    rows={5}
+                    style={{
+                      width: "100%",
+                      borderRadius: 12,
+                      border: "1px solid #E5E7EB",
+                      padding: 14,
+                      fontSize: 15,
+                      resize: "vertical",
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <label
+                    htmlFor="repair-before-images"
+                    style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                  >
+                    แนบรูปก่อนซ่อม (ถ้ามี)
+                  </label>
+
+                  <input
+                    key={fileInputKey}
+                    id="repair-before-images"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => setBeforeFiles(Array.from(e.target.files || []))}
+                    style={{
+                      width: "100%",
+                      borderRadius: 12,
+                      border: "1px solid #E5E7EB",
+                      padding: 12,
+                      fontSize: 14,
+                      background: "#FFFFFF",
+                    }}
+                  />
+
+                  <div style={{ marginTop: 8, color: "#6B7280", fontSize: 13 }}>
+                    อัปโหลดได้หลายรูป รองรับเฉพาะไฟล์รูปภาพ
+                  </div>
+
+                  {beforePreviewUrls.length > 0 ? (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gap: 12,
+                        marginTop: 14,
+                      }}
+                    >
+                      {beforePreviewUrls.map((url, index) => (
+                        <img
+                          key={`${url}-${index}`}
+                          src={url}
+                          alt={`before-preview-${index + 1}`}
+                          style={{
+                            width: "100%",
+                            height: 140,
+                            objectFit: "cover",
+                            borderRadius: 16,
+                            border: "1px solid #E5E7EB",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    style={{
+                      border: "none",
+                      borderRadius: 12,
+                      background: "#F63D7A",
+                      color: "#FFFFFF",
+                      padding: "12px 20px",
+                      fontSize: 15,
+                      fontWeight: 700,
+                      cursor: submitting ? "not-allowed" : "pointer",
+                      opacity: submitting ? 0.7 : 1,
+                    }}
+                  >
+                    {submitting ? "กำลังบันทึก..." : "บันทึก"}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div style={{ display: "grid", gap: 24 }}>
+              <div
+                style={{
+                  background: "#FFFFFF",
+                  borderRadius: 24,
+                  padding: 24,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+                  minHeight: 320,
+                }}
+              >
+                <h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 16 }}>
+                  สถานะงาน
+                </h2>
+
+                {loadingDetail ? (
+                  <div>กำลังโหลดรายละเอียด...</div>
+                ) : selectedRepair ? (
+                  <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 16,
+                        marginBottom: 16,
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: "#6B7280", marginBottom: 4 }}>
+                          เฟอร์นิเจอร์
+                        </div>
+                        <div style={{ fontWeight: 700 }}>
+                          {selectedRepair.furniture?.itemName || "-"}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ color: "#6B7280", marginBottom: 4 }}>ปัญหา</div>
+                        <div style={{ fontWeight: 700 }}>{selectedRepair.description}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 14 }}>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "8px 14px",
+                          borderRadius: 999,
+                          fontWeight: 700,
+                          ...selectedStatusStyle,
+                        }}
+                      >
+                        {getStatusLabel(selectedRepair.status)}
+                      </span>
+                    </div>
+
+                    <div style={{ marginBottom: 16, color: "#6B7280" }}>
+                      แจ้งเมื่อ {formatThaiDateTime(selectedRepair.requestedAt)}
+                    </div>
+
+                    <div style={{ display: "grid", gap: 12 }}>
+                      {(selectedRepair.statusLogs || []).map((log) => {
+                        const style = getStatusColor(log.newStatus);
+                        return (
+                          <div key={log.id} style={{ lineHeight: 1.7 }}>
+                            <div style={{ color: "#6B7280", fontSize: 14 }}>
+                              {formatThaiDate(log.changedAt)}
+                            </div>
+                            <div style={{ fontWeight: 700, color: style.color }}>
+                              • {getStatusLabel(log.newStatus)}
+                            </div>
+                            <div style={{ color: "#4B5563" }}>{log.note || "-"}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {(selectedRepair.afterImages || []).length > 0 ? (
+                      <div style={{ marginTop: 16 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                          รูปหลังซ่อม
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                            gap: 12,
+                          }}
+                        >
+                          {(selectedRepair.afterImages || []).map((image) => (
+                            <img
+                              key={image.id}
+                              src={image.fileUrl}
+                              alt="after-repair"
+                              style={{
+                                width: "100%",
+                                height: 160,
+                                objectFit: "cover",
+                                borderRadius: 16,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div style={{ color: "#6B7280" }}>ยังไม่มีรายการที่เลือก</div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  background: "#FFFFFF",
+                  borderRadius: 24,
+                  padding: 24,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 16,
+                  }}
+                >
+                  <h2 style={{ fontSize: 28, fontWeight: 700 }}>ประวัติการแจ้งซ่อม</h2>
+
+                  {selectedRepair?.status === "pending" ? (
+                    <button
+                      type="button"
+                      onClick={handleCancelSelectedRepair}
+                      disabled={cancelling}
+                      style={{
+                        border: "none",
+                        borderRadius: 12,
+                        background: "#FDE2E2",
+                        color: "#C0392B",
+                        padding: "10px 14px",
+                        fontWeight: 700,
+                        cursor: cancelling ? "not-allowed" : "pointer",
+                        opacity: cancelling ? 0.7 : 1,
+                      }}
+                    >
+                      {cancelling ? "กำลังยกเลิก..." : "ยกเลิกรายการที่เลือก"}
+                    </button>
+                  ) : null}
+                </div>
+
+                <div style={{ display: "grid", gap: 12 }}>
+                  {repairList.length === 0 ? (
+                    <div style={{ color: "#6B7280" }}>ยังไม่มีประวัติการแจ้งซ่อม</div>
+                  ) : (
+                    repairList.map((item) => {
+                      const style = getStatusColor(item.status);
+                      const active = item.id === selectedRepairId;
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setSelectedRepairId(item.id)}
+                          style={{
+                            textAlign: "left",
+                            border: active
+                              ? "2px solid #F63D7A"
+                              : "1px solid rgba(0,0,0,0.08)",
+                            borderRadius: 18,
+                            background: active ? "#FFF5F8" : "#FFFFFF",
+                            padding: 16,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 16,
+                              marginBottom: 8,
+                            }}
+                          >
+                            <div style={{ fontWeight: 700 }}>
+                              {item.furniture?.itemName || item.title}
+                            </div>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "6px 12px",
+                                borderRadius: 999,
+                                fontWeight: 700,
+                                fontSize: 13,
+                                whiteSpace: "nowrap",
+                                ...style,
+                              }}
+                            >
+                              {getStatusLabel(item.status)}
+                            </span>
+                          </div>
+
+                          <div style={{ color: "#4B5563", marginBottom: 8 }}>
+                            {item.description}
+                          </div>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              flexWrap: "wrap",
+                              gap: 8,
+                              color: "#6B7280",
+                              fontSize: 14,
+                            }}
+                          >
+                            <span>{formatThaiDate(item.requestedAt)}</span>
+                            <span>
+                              {getCategoryLabel(item.category)} ·{" "}
+                              {getPriorityLabel(item.priority)}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

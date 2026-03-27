@@ -1,476 +1,873 @@
-// src/pages/OwnerRepairs.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
-import { getAuth } from "firebase/auth";
-import { db } from "../firebase";
-import { useOwnerDormName } from "../hooks/useOwnerDormName";
+import { useEffect, useMemo, useState } from "react";
 import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  doc,
-  updateDoc,
-  serverTimestamp,
-  arrayUnion,
-  Timestamp,
-} from "firebase/firestore";
+  getOwnerRepairRequestDetail,
+  getOwnerRepairRequests,
+  updateOwnerRepairRequestStatus,
+} from "../service/repair.service";
+import { uploadRepairImages } from "../service/repairUpload.service";
+import type { RepairRequestItem, RepairStatusValue } from "../service/repair.service";
 
-/** ---------- Types ---------- */
-type MaintenanceStatus = "open" | "in_progress" | "done" | "cancelled";
+function formatThaiDate(date?: string | null) {
+  if (!date) return "-";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "-";
 
-type Maintenance = {
-  id: string;
-  title: string;
-  description: string;
-  status: MaintenanceStatus;
-  imageUrl?: string | null;
-  images?: string[];
-  createdBy?: string | null;
-  createdAt?: Timestamp;
-  updatedAt?: Timestamp;
-  history?: Array<{
-    status: MaintenanceStatus;
-    note?: string | null;
-    at?: Timestamp;
-    by?: string | null;
-  }>;
-  tenantName?: string | null;
-};
-
-type Room = { id: string; roomNumber: string };
-type Task = Maintenance & { roomId: string; roomNumber: string };
-
-/** ---------- Helpers ---------- */
-const statusLabel = (s: MaintenanceStatus) =>
-  s === "open"
-    ? "รอรับเรื่อง"
-    : s === "in_progress"
-    ? "กำลังดำเนินการ"
-    : s === "done"
-    ? "ซ่อมเสร็จแล้ว"
-    : "ยกเลิก";
-
-const badgeClass = (s: MaintenanceStatus) =>
-  s === "open"
-    ? "bg-gray-100 text-gray-700"
-    : s === "in_progress"
-    ? "bg-emerald-100 text-emerald-700"
-    : s === "done"
-    ? "bg-rose-100 text-rose-700"
-    : "bg-neutral-100 text-neutral-600";
-
-const fmt = (ts?: Timestamp) => (ts ? ts.toDate().toLocaleDateString("sv-SE") : "-");
-
-/** ใช้ history ถ้ามี เพื่อหา 'สถานะสุดท้ายจริง' (กันกรณี array สลับลำดับด้วยการเลือก at ล่าสุด) */
-function finalStatusOf(t?: Task | null): MaintenanceStatus | undefined {
-  if (!t) return undefined;
-  const h = t.history ?? [];
-  if (h.length === 0) return t.status;
-  const last = h.reduce((acc, cur) => {
-    const a = acc?.at?.toMillis?.() ?? 0;
-    const b = cur?.at?.toMillis?.() ?? 0;
-    return b >= a ? cur : acc;
-  });
-  return last?.status ?? t.status;
+  return new Intl.DateTimeFormat("th-TH", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(parsed);
 }
 
-/** ====================================================== */
+function formatThaiDateTime(date?: string | null) {
+  if (!date) return "-";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("th-TH", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+function getStatusLabel(status: RepairStatusValue) {
+  switch (status) {
+    case "pending":
+      return "รอรับเรื่อง";
+    case "in_progress":
+      return "กำลังดำเนินการ";
+    case "waiting_parts":
+      return "รออะไหล่";
+    case "completed":
+      return "เสร็จสิ้น";
+    case "cancelled":
+      return "ยกเลิก";
+    default:
+      return status;
+  }
+}
+
+function getStatusColor(status: RepairStatusValue) {
+  switch (status) {
+    case "pending":
+      return { background: "#FFF3CD", color: "#8A6D1D" };
+    case "in_progress":
+      return { background: "#D1F3D8", color: "#1C7C35" };
+    case "waiting_parts":
+      return { background: "#E5E7EB", color: "#4B5563" };
+    case "completed":
+      return { background: "#D9F7E8", color: "#0F8F4F" };
+    case "cancelled":
+      return { background: "#FDE2E2", color: "#C0392B" };
+    default:
+      return { background: "#E5E7EB", color: "#374151" };
+  }
+}
+
+function getCategoryLabel(value: string) {
+  switch (value) {
+    case "electrical":
+      return "เครื่องใช้ไฟฟ้า";
+    case "water":
+      return "ระบบน้ำ";
+    case "furniture":
+      return "เฟอร์นิเจอร์";
+    case "room":
+      return "ภายในห้อง";
+    case "other":
+      return "อื่น ๆ";
+    default:
+      return value;
+  }
+}
+
+function getPriorityLabel(value: string) {
+  switch (value) {
+    case "low":
+      return "ต่ำ";
+    case "medium":
+      return "ปานกลาง";
+    case "high":
+      return "สูง";
+    case "urgent":
+      return "เร่งด่วน";
+    default:
+      return value;
+  }
+}
+
+const statusOptions: Array<{ value: RepairStatusValue; label: string }> = [
+  { value: "pending", label: "รอรับเรื่อง" },
+  { value: "in_progress", label: "กำลังดำเนินการ" },
+  { value: "waiting_parts", label: "รออะไหล่" },
+  { value: "completed", label: "เสร็จสิ้น" },
+  { value: "cancelled", label: "ยกเลิก" },
+];
+
 export default function OwnerRepairs() {
-  const { dormId } = useOwnerDormName();
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [selectedId, setSelectedId] = useState<string>("");
+  const [repairList, setRepairList] = useState<RepairRequestItem[]>([]);
+  const [selectedRepairId, setSelectedRepairId] = useState("");
+  const [selectedRepair, setSelectedRepair] = useState<RepairRequestItem | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const [filter, setFilter] = useState<"all" | MaintenanceStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<RepairStatusValue | "">("");
+  const [searchText, setSearchText] = useState("");
 
-  // อัปเดตสถานะ
-  const [newStatus, setNewStatus] = useState<MaintenanceStatus>("in_progress");
+  const [status, setStatus] = useState<RepairStatusValue>("pending");
   const [note, setNote] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [ownerNote, setOwnerNote] = useState("");
+  const [afterFiles, setAfterFiles] = useState<File[]>([]);
+  const [afterPreviewUrls, setAfterPreviewUrls] = useState<string[]>([]);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
-  // เก็บ unsub ของ snapshot รายห้อง
-  const taskUnsubs = useRef<Record<string, () => void>>({});
+  const selectedStatusStyle = useMemo(() => {
+    if (!selectedRepair) {
+      return { background: "#E5E7EB", color: "#374151" };
+    }
+    return getStatusColor(selectedRepair.status);
+  }, [selectedRepair]);
 
-  /** โหลด rooms แล้ว subscribe maintenances ของทุกห้อง */
+  const isClosed = selectedRepair
+    ? selectedRepair.status === "completed" || selectedRepair.status === "cancelled"
+    : false;
+
   useEffect(() => {
-    // cleanup ทั้งหมดก่อนเริ่มรอบใหม่
-    Object.values(taskUnsubs.current).forEach((fn) => fn?.());
-    taskUnsubs.current = {};
-    setTasks([]);
-    setSelectedId("");
+    if (afterFiles.length === 0) {
+      setAfterPreviewUrls([]);
+      return;
+    }
 
-    if (!dormId) return;
-
-    const roomsRef = collection(db, "dorms", dormId, "rooms");
-    const unsubRooms = onSnapshot(
-      roomsRef,
-      (snap) => {
-        const list: Room[] = snap.docs.map((d) => {
-          const data = d.data() as any;
-          return { id: d.id, roomNumber: String(data.roomNumber ?? "") };
-        });
-        list.sort((a, b) => Number(a.roomNumber) - Number(b.roomNumber));
-        setRooms(list);
-
-        // subscribe ทีละห้อง (สมัครเฉพาะที่ยังไม่ได้สมัคร)
-        const alive = new Set<string>();
-        list.forEach((r) => {
-          alive.add(r.id);
-          if (taskUnsubs.current[r.id]) return;
-
-          const ref = collection(db, "dorms", dormId, "rooms", r.id, "maintenances");
-          const qy = query(ref, orderBy("createdAt", "desc"));
-          taskUnsubs.current[r.id] = onSnapshot(
-            qy,
-            (ms) => {
-              setTasks((prev) => {
-                const others = prev.filter((t) => t.roomId !== r.id);
-                const incoming: Task[] = ms.docs.map((d) => {
-                  const m = d.data() as any;
-                  return {
-                    id: d.id,
-                    title: m.title,
-                    description: m.description,
-                    status: (m.status ?? "open") as MaintenanceStatus,
-                    imageUrl: m.imageUrl ?? null,
-                    images: Array.isArray(m.images) ? m.images.filter(Boolean) : undefined,
-                    createdBy: m.createdBy ?? null,
-                    createdAt: m.createdAt,
-                    updatedAt: m.updatedAt,
-                    history: m.history ?? [],
-                    tenantName: m.tenantName ?? null,
-                    roomId: r.id,
-                    roomNumber: r.roomNumber,
-                  };
-                });
-                return [...others, ...incoming].sort(
-                  (a, b) =>
-                    (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)
-                );
-              });
-            },
-            (err) => console.error("maintenances:", err)
-          );
-        });
-
-        // ยกเลิก subscribe ห้องที่ถูกลบออก
-        Object.keys(taskUnsubs.current).forEach((roomId) => {
-          if (!alive.has(roomId)) {
-            taskUnsubs.current[roomId]?.();
-            delete taskUnsubs.current[roomId];
-          }
-        });
-      },
-      (err) => console.error("rooms:", err)
-    );
+    const nextUrls = afterFiles.map((file) => URL.createObjectURL(file));
+    setAfterPreviewUrls(nextUrls);
 
     return () => {
-      unsubRooms();
-      Object.values(taskUnsubs.current).forEach((fn) => fn?.());
-      taskUnsubs.current = {};
+      nextUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [dormId]);
+  }, [afterFiles]);
 
-  /** Auto-select รายการแรกเมื่อ tasks เปลี่ยน หรือ selection ไม่ valid */
-  useEffect(() => {
-    if (tasks.length === 0) return;
-
-    let ok = false;
-    if (selectedId) {
-      const [id, roomId] = selectedId.split("@");
-      ok = tasks.some((t) => t.id === id && t.roomId === roomId);
-    }
-
-    if (!ok) {
-      const first = tasks[0];
-      setSelectedId(first.id + "@" + first.roomId);
-      setNewStatus(finalStatusOf(first) ?? first.status);
-      setImageUrl(first.imageUrl || "");
-      setNote("");
-    }
-  }, [tasks, selectedId]);
-
-  /** คำนวณ tasks ตาม filter */
-  const filtered = useMemo(
-    () => (filter === "all" ? tasks : tasks.filter((t) => t.status === filter)),
-    [tasks, filter]
-  );
-
-  /** task ที่เลือก + คำนวณสถานะสุดท้ายและธง isDone */
-  const selectedTask = useMemo(() => {
-    if (!selectedId) return null;
-    const [id, roomId] = selectedId.split("@");
-    return tasks.find((t) => t.id === id && t.roomId === roomId) || null;
-  }, [selectedId, tasks]);
-
-  const finalStatus = finalStatusOf(selectedTask);
-  const isDone = finalStatus === "done";
-
-  async function handleUpdateStatus() {
-    if (!dormId || !selectedTask) return;
-    // กันการบันทึกซ้ำเมื่อปิดงานแล้ว
-    if (finalStatusOf(selectedTask) === "done") return;
-
+  async function loadRepairList(options?: {
+    keepSelected?: boolean;
+    nextSelectedId?: string;
+  }) {
     try {
-      const auth = getAuth();
-      const ref = doc(
-        db,
-        "dorms",
-        dormId,
-        "rooms",
-        selectedTask.roomId,
-        "maintenances",
-        selectedTask.id
-      );
+      setLoadingPage(true);
+      setErrorMessage("");
 
-      await updateDoc(ref, {
-        status: newStatus,
-        imageUrl: imageUrl.trim() || null,
-        updatedAt: serverTimestamp(),
-        history: arrayUnion({
-          status: newStatus,
-          note: note.trim() || null,
-          at: Timestamp.now(),
-          by: auth.currentUser?.uid ?? null,
-        }),
+      const result = await getOwnerRepairRequests({
+        page: 1,
+        limit: 100,
+        status: statusFilter,
+        search: searchText.trim(),
       });
 
+      const items = result.data || [];
+      setRepairList(items);
+
+      const preferredId = options?.nextSelectedId;
+      const keepSelected = options?.keepSelected !== false;
+
+      if (preferredId && items.some((item) => item.id === preferredId)) {
+        setSelectedRepairId(preferredId);
+      } else if (
+        keepSelected &&
+        selectedRepairId &&
+        items.some((item) => item.id === selectedRepairId)
+      ) {
+        setSelectedRepairId(selectedRepairId);
+      } else if (items.length > 0) {
+        setSelectedRepairId(items[0].id);
+      } else {
+        setSelectedRepairId("");
+        setSelectedRepair(null);
+      }
+    } catch (error: any) {
+      setErrorMessage(error?.message || "โหลดรายการแจ้งซ่อมไม่สำเร็จ");
+    } finally {
+      setLoadingPage(false);
+    }
+  }
+
+  async function loadRepairDetail(repairRequestId: string) {
+    try {
+      setLoadingDetail(true);
+      setErrorMessage("");
+
+      const detail = await getOwnerRepairRequestDetail(repairRequestId);
+      setSelectedRepair(detail);
+      setStatus(detail.status);
+      setOwnerNote(detail.ownerNote || "");
       setNote("");
-    } catch (e) {
-      console.error(e);
-      alert(e instanceof Error ? e.message : String(e));
+      setAfterFiles([]);
+      setAfterPreviewUrls([]);
+      setFileInputKey((prev) => prev + 1);
+    } catch (error: any) {
+      setErrorMessage(error?.message || "โหลดรายละเอียดแจ้งซ่อมไม่สำเร็จ");
+    } finally {
+      setLoadingDetail(false);
+    }
+  }
+
+  useEffect(() => {
+    loadRepairList({ keepSelected: false });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRepairId) {
+      setSelectedRepair(null);
+      return;
+    }
+
+    loadRepairDetail(selectedRepairId);
+  }, [selectedRepairId]);
+
+  async function handleSearch() {
+    await loadRepairList({ keepSelected: false });
+  }
+
+  async function handleUpdateRepair() {
+    if (!selectedRepair) return;
+
+    try {
+      setSubmitting(true);
+      setErrorMessage("");
+
+      const afterImageUrls = await uploadRepairImages(afterFiles, "after");
+
+      const updated = await updateOwnerRepairRequestStatus(selectedRepair.id, {
+        status,
+        note: note.trim() || undefined,
+        owner_note: ownerNote.trim() || "",
+        after_image_urls: afterImageUrls,
+      });
+
+      setSelectedRepair(updated);
+      setRepairList((prev) =>
+        prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+      );
+      setNote("");
+      setAfterFiles([]);
+      setAfterPreviewUrls([]);
+      setFileInputKey((prev) => prev + 1);
+
+      window.alert("บันทึกการอัปเดตสำเร็จ");
+    } catch (error: any) {
+      window.alert(error?.message || "อัปเดตรายการแจ้งซ่อมไม่สำเร็จ");
+    } finally {
+      setSubmitting(false);
     }
   }
 
   return (
-    <div className="p-2 md:p-4">
-      <div className="mx-auto max-w-6xl">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">จัดการรายการแจ้งซ่อม</h1>
+    <div style={{ padding: 24, background: "#F7F7F8", minHeight: "100vh" }}>
+      <div style={{ maxWidth: 1500, margin: "0 auto" }}>
+        <h1 style={{ fontSize: 38, fontWeight: 700, marginBottom: 24 }}>
+          จัดการรายการแจ้งซ่อม
+        </h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* LEFT */}
-          <div className="space-y-4 lg:col-span-1">
-            <section className="rounded-2xl bg-white border p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-semibold text-gray-900">รายการทั้งหมด</h2>
-                <select
-                  className="rounded-lg border px-3 py-1.5 text-sm"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value as any)}
+        {errorMessage ? (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: 12,
+              borderRadius: 12,
+              background: "#FDE2E2",
+              color: "#C0392B",
+            }}
+          >
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "340px 1fr 380px",
+            gap: 24,
+            alignItems: "start",
+          }}
+        >
+          <div
+            style={{
+              background: "#FFFFFF",
+              borderRadius: 24,
+              padding: 20,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+            }}
+          >
+            <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label
+                  htmlFor="repair-search"
+                  style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
                 >
-                  <option value="all">ทั้งหมด</option>
-                  <option value="open">รอรับเรื่อง</option>
-                  <option value="in_progress">กำลังดำเนินการ</option>
-                  <option value="done">ซ่อมเสร็จแล้ว</option>
-                  <option value="cancelled">ยกเลิก</option>
+                  ค้นหารายการ
+                </label>
+                <input
+                  id="repair-search"
+                  type="text"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder="ค้นหาห้อง ผู้เช่า หรือรายการ"
+                  style={{
+                    width: "100%",
+                    height: 44,
+                    borderRadius: 12,
+                    border: "1px solid #E5E7EB",
+                    padding: "0 14px",
+                    fontSize: 14,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="repair-status-filter"
+                  style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                >
+                  สถานะ
+                </label>
+                <select
+                  id="repair-status-filter"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as RepairStatusValue | "")}
+                  style={{
+                    width: "100%",
+                    height: 44,
+                    borderRadius: 12,
+                    border: "1px solid #E5E7EB",
+                    padding: "0 14px",
+                    fontSize: 14,
+                  }}
+                >
+                  <option value="">ทั้งหมด</option>
+                  {statusOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {filtered.length === 0 ? (
-                <p className="text-gray-500 text-sm">ไม่มีงานซ่อม</p>
-              ) : (
-                <ul className="space-y-2 max-h-[420px] overflow-auto pr-1">
-                  {filtered.map((t) => {
-                    const key = t.id + "@" + t.roomId;
-                    const active = selectedId === key;
-                    return (
-                      <li key={key}>
-                        <button
-                          onClick={() => {
-                            setSelectedId(key);
-                            setNewStatus(finalStatusOf(t) ?? t.status);
-                            setImageUrl(t.imageUrl || "");
-                            setNote("");
-                          }}
-                          className={`w-full text-left rounded-xl p-3 border ${
-                            active
-                              ? "bg-rose-50 border-rose-300"
-                              : "bg-white hover:bg-rose-50/60 border-gray-100"
-                          }`}
-                        >
-                          <div className="font-semibold text-gray-900">
-                            {t.roomNumber}{" "}
-                            <span className="ml-1 text-gray-500 font-normal">
-                              {t.tenantName ? `| ${t.tenantName}` : ""}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-700 truncate">{t.title}</div>
-                          <div className="mt-2">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass(
-                                finalStatusOf(t) ?? t.status
-                              )}`}
-                            >
-                              {statusLabel(finalStatusOf(t) ?? t.status)}
-                            </span>
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
+              <button
+                type="button"
+                onClick={handleSearch}
+                style={{
+                  border: "none",
+                  borderRadius: 12,
+                  background: "#F63D7A",
+                  color: "#FFFFFF",
+                  height: 44,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                ค้นหา
+              </button>
+            </div>
 
-            <section className="rounded-2xl bg-white border p-4">
-              <h2 className="font-semibold text-gray-900 mb-3">ประวัติการแจ้งซ่อม</h2>
-              {!selectedTask ? (
-                <p className="text-gray-500 text-sm">ยังไม่เลือกรายการ</p>
-              ) : selectedTask.history && selectedTask.history.length > 0 ? (
-                <ul className="space-y-2 max-h-[220px] overflow-auto pr-1">
-                  {selectedTask.history
-                    .slice()
-                    .sort(
-                      (a, b) => (b.at?.toMillis?.() ?? 0) - (a.at?.toMillis?.() ?? 0)
-                    )
-                    .map((h, idx) => (
-                      <li key={(h.at?.toMillis?.() || idx) + ":" + h.status} className="text-sm">
-                        <div className="text-gray-600">
-                          {fmt(h.at)} • {statusLabel(h.status)}
-                        </div>
-                        {h.note ? <div className="text-gray-700">{h.note}</div> : null}
-                      </li>
-                    ))}
-                </ul>
-              ) : (
-                <div className="text-sm text-gray-600">
-                  {fmt(selectedTask.createdAt)} • {statusLabel(selectedTask.status)}
-                </div>
-              )}
-            </section>
+            <h2 style={{ fontSize: 26, fontWeight: 700, marginBottom: 14 }}>
+              รายการทั้งหมด
+            </h2>
+
+            {loadingPage ? (
+              <div style={{ color: "#6B7280" }}>กำลังโหลดรายการ...</div>
+            ) : repairList.length === 0 ? (
+              <div style={{ color: "#6B7280" }}>ยังไม่มีรายการแจ้งซ่อม</div>
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
+                {repairList.map((item) => {
+                  const style = getStatusColor(item.status);
+                  const active = item.id === selectedRepairId;
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelectedRepairId(item.id)}
+                      style={{
+                        textAlign: "left",
+                        border: active
+                          ? "2px solid #F63D7A"
+                          : "1px solid rgba(0,0,0,0.08)",
+                        borderRadius: 18,
+                        background: active ? "#FFF5F8" : "#FFFFFF",
+                        padding: 16,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                        {item.room.buildingName || item.room.buildingCode
+                          ? `ตึก ${item.room.buildingName || item.room.buildingCode} ห้อง ${item.room.roomNumber}`
+                          : `ห้อง ${item.room.roomNumber}`}
+                      </div>
+
+                      <div style={{ color: "#4B5563", marginBottom: 6 }}>
+                        ผู้เช่า: {item.tenant.fullName || "-"}
+                      </div>
+
+                      <div style={{ color: "#4B5563", marginBottom: 10 }}>
+                        {item.description}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 12,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span style={{ color: "#6B7280", fontSize: 14 }}>
+                          {formatThaiDate(item.requestedAt)}
+                        </span>
+
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "6px 12px",
+                            borderRadius: 999,
+                            fontWeight: 700,
+                            fontSize: 13,
+                            ...style,
+                          }}
+                        >
+                          {getStatusLabel(item.status)}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* RIGHT */}
-          <div className="lg:col-span-2 space-y-4">
-            <section className="rounded-2xl bg-white border p-4">
-              <h2 className="font-semibold text-gray-900 mb-3">รายละเอียดการแจ้งซ่อม</h2>
-              {!selectedTask ? (
-                <p className="text-gray-500 text-sm">เลือกรายการทางซ้ายเพื่อดูรายละเอียด</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                  <LabelValue label="ห้อง" value={selectedTask.roomNumber} />
-                  <LabelValue label="ผู้เช่า" value={selectedTask.tenantName || "-"} />
-                  <LabelValue label="ปัญหา" value={selectedTask.title} />
-                  <LabelValue label="วันที่แจ้ง" value={fmt(selectedTask.createdAt)} />
-                  <div className="sm:col-span-2 flex items-center gap-2 mt-1">
-                    <span className="text-gray-600">สถานะปัจจุบัน:</span>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass(
-                        finalStatus ?? selectedTask.status
-                      )}`}
-                    >
-                      {statusLabel(finalStatus ?? selectedTask.status)}
-                    </span>
-                  </div>
-                  {selectedTask.description ? (
-                    <div className="sm:col-span-2">
-                      <div className="text-gray-600">รายละเอียด:</div>
-                      <div className="text-gray-800">{selectedTask.description}</div>
-                    </div>
-                  ) : null}
+          <div style={{ display: "grid", gap: 24 }}>
+            <div
+              style={{
+                background: "#FFFFFF",
+                borderRadius: 24,
+                padding: 24,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+                minHeight: 340,
+              }}
+            >
+              <h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 18 }}>
+                อัปเดตสถานะการซ่อม
+              </h2>
 
-                  {/* รูปจากแจ้งซ่อม: รองรับ imageUrl เดี่ยว หรือ images หลายรูป */}
-                  {(() => {
-                    const arr = Array.isArray(selectedTask?.images)
-                      ? (selectedTask!.images as string[]).filter(Boolean)
-                      : [];
-                    const single = (selectedTask?.imageUrl || "") as string;
-                    const all = arr.length ? arr : single ? [single] : [];
-                    if (!all.length) return null;
-                    return (
-                      <div className="sm:col-span-2">
-                        <div className="text-gray-600">รูปจากแจ้งซ่อม:</div>
-                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                          {all.map((src, i) => (
-                            <a key={i} href={src} target="_blank" rel="noreferrer">
-                              <img
-                                src={src}
-                                alt={`maintenance-${i}`}
-                                className="w-full h-36 object-cover rounded-lg border"
-                                loading="lazy"
-                              />
-                            </a>
-                          ))}
-                        </div>
+              {loadingDetail ? (
+                <div style={{ color: "#6B7280" }}>กำลังโหลดรายละเอียด...</div>
+              ) : selectedRepair ? (
+                <>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 16,
+                      marginBottom: 18,
+                    }}
+                  >
+                    <div>
+                      <div style={{ color: "#6B7280", marginBottom: 4 }}>ห้อง</div>
+                      <div style={{ fontWeight: 700 }}>
+                        {selectedRepair.room.buildingName || selectedRepair.room.buildingCode
+                          ? `ตึก ${selectedRepair.room.buildingName || selectedRepair.room.buildingCode} ห้อง ${selectedRepair.room.roomNumber}`
+                          : `ห้อง ${selectedRepair.room.roomNumber}`}
                       </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </section>
+                    </div>
 
-            <section className="rounded-2xl bg-white border p-4">
-              <h2 className="font-semibold text-gray-900 mb-3">อัปเดตสถานะการซ่อม</h2>
-              {!selectedTask ? (
-                <p className="text-gray-500 text-sm">เลือกรายการทางซ้ายก่อน</p>
-              ) : (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <select
-                      className="rounded-xl border px-3 py-2"
-                      value={newStatus}
-                      onChange={(e) => setNewStatus(e.target.value as MaintenanceStatus)}
-                      disabled={isDone}
+                    <div>
+                      <div style={{ color: "#6B7280", marginBottom: 4 }}>ผู้เช่า</div>
+                      <div style={{ fontWeight: 700 }}>
+                        {selectedRepair.tenant.fullName || "-"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ color: "#6B7280", marginBottom: 4 }}>เฟอร์นิเจอร์</div>
+                      <div style={{ fontWeight: 700 }}>
+                        {selectedRepair.furniture?.itemName || "-"}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ color: "#6B7280", marginBottom: 4 }}>หมวดหมู่</div>
+                      <div style={{ fontWeight: 700 }}>
+                        {getCategoryLabel(selectedRepair.category)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ color: "#6B7280", marginBottom: 4 }}>
+                        ความเร่งด่วน
+                      </div>
+                      <div style={{ fontWeight: 700 }}>
+                        {getPriorityLabel(selectedRepair.priority)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ color: "#6B7280", marginBottom: 4 }}>
+                        สถานะปัจจุบัน
+                      </div>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "8px 14px",
+                          borderRadius: 999,
+                          fontWeight: 700,
+                          ...selectedStatusStyle,
+                        }}
+                      >
+                        {getStatusLabel(selectedRepair.status)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 18 }}>
+                    <div style={{ color: "#6B7280", marginBottom: 6 }}>ปัญหา</div>
+                    <div style={{ fontWeight: 700, lineHeight: 1.7 }}>
+                      {selectedRepair.description}
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label
+                      htmlFor="owner-repair-status"
+                      style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
                     >
-                      <option value="open">รอรับเรื่อง</option>
-                      <option value="in_progress">กำลังดำเนินการ</option>
-                      <option value="done">ซ่อมเสร็จแล้ว</option>
-                      <option value="cancelled">ยกเลิก</option>
+                      เลือกสถานะ
+                    </label>
+                    <select
+                      id="owner-repair-status"
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as RepairStatusValue)}
+                      disabled={isClosed}
+                      style={{
+                        width: "100%",
+                        height: 48,
+                        borderRadius: 12,
+                        border: "1px solid #E5E7EB",
+                        padding: "0 14px",
+                        fontSize: 15,
+                        background: isClosed ? "#F3F4F6" : "#FFFFFF",
+                      }}
+                    >
+                      {statusOptions.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
                     </select>
-                    <input
-                      className="rounded-xl border px-3 py-2"
-                      placeholder="หมายเหตุเพิ่มเติม (ถ้ามี)"
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label
+                      htmlFor="owner-repair-note"
+                      style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                    >
+                      หมายเหตุเพิ่มเติม
+                    </label>
+                    <textarea
+                      id="owner-repair-note"
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
-                      disabled={isDone}
+                      disabled={isClosed}
+                      placeholder="เช่น ติดต่อช่างแล้ว รอเข้าซ่อมช่วงบ่าย"
+                      rows={4}
+                      style={{
+                        width: "100%",
+                        borderRadius: 12,
+                        border: "1px solid #E5E7EB",
+                        padding: 14,
+                        fontSize: 15,
+                        resize: "vertical",
+                        background: isClosed ? "#F3F4F6" : "#FFFFFF",
+                      }}
                     />
                   </div>
 
-                  <div>
-                    <div className="text-sm text-gray-600">แบบภาพ (ถ้ามี):</div>
-                    <input
-                      className="mt-1 w-full rounded-xl border px-3 py-2"
-                      placeholder="วางลิงก์รูปภาพ (ถ้าจะอัปโหลดจริงค่อยเชื่อม Firebase Storage)"
-                      value={imageUrl}
-                      onChange={(e) => setImageUrl(e.target.value)}
-                      disabled={isDone}
+                  <div style={{ marginBottom: 16 }}>
+                    <label
+                      htmlFor="owner-repair-owner-note"
+                      style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                    >
+                      บันทึกสำหรับเจ้าของหอ
+                    </label>
+                    <textarea
+                      id="owner-repair-owner-note"
+                      value={ownerNote}
+                      onChange={(e) => setOwnerNote(e.target.value)}
+                      disabled={isClosed}
+                      placeholder="เช่น ตรวจเบื้องต้นพบว่าต้องซ่อมบานพับ"
+                      rows={4}
+                      style={{
+                        width: "100%",
+                        borderRadius: 12,
+                        border: "1px solid #E5E7EB",
+                        padding: 14,
+                        fontSize: 15,
+                        resize: "vertical",
+                        background: isClosed ? "#F3F4F6" : "#FFFFFF",
+                      }}
                     />
-                    {imageUrl ? (
-                      <img src={imageUrl} className="mt-3 max-h-36 rounded-lg border" alt="preview" />
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <label
+                      htmlFor="owner-repair-after-images"
+                      style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                    >
+                      แนบรูปหลังซ่อม (ถ้ามี)
+                    </label>
+
+                    <input
+                      key={fileInputKey}
+                      id="owner-repair-after-images"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={isClosed}
+                      onChange={(e) => setAfterFiles(Array.from(e.target.files || []))}
+                      style={{
+                        width: "100%",
+                        borderRadius: 12,
+                        border: "1px solid #E5E7EB",
+                        padding: 12,
+                        fontSize: 14,
+                        background: isClosed ? "#F3F4F6" : "#FFFFFF",
+                      }}
+                    />
+
+                    <div style={{ marginTop: 8, color: "#6B7280", fontSize: 13 }}>
+                      อัปโหลดได้หลายรูป รองรับเฉพาะไฟล์รูปภาพ
+                    </div>
+
+                    {afterPreviewUrls.length > 0 ? (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                          gap: 12,
+                          marginTop: 14,
+                        }}
+                      >
+                        {afterPreviewUrls.map((url, index) => (
+                          <img
+                            key={`${url}-${index}`}
+                            src={url}
+                            alt={`after-preview-${index + 1}`}
+                            style={{
+                              width: "100%",
+                              height: 140,
+                              objectFit: "cover",
+                              borderRadius: 16,
+                              border: "1px solid #E5E7EB",
+                            }}
+                          />
+                        ))}
+                      </div>
                     ) : null}
                   </div>
 
-                  {!isDone ? (
-                    <div className="flex justify-end">
-                      <button
-                        onClick={handleUpdateStatus}
-                        className="rounded-xl px-5 py-2.5 bg-rose-500 text-white hover:bg-rose-600"
-                      >
-                        บันทึกการอัปเดต
-                      </button>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      onClick={handleUpdateRepair}
+                      disabled={submitting || isClosed}
+                      style={{
+                        border: "none",
+                        borderRadius: 12,
+                        background: "#F63D7A",
+                        color: "#FFFFFF",
+                        padding: "12px 20px",
+                        fontSize: 15,
+                        fontWeight: 700,
+                        cursor: submitting || isClosed ? "not-allowed" : "pointer",
+                        opacity: submitting || isClosed ? 0.7 : 1,
+                      }}
+                    >
+                      {submitting ? "กำลังบันทึก..." : "บันทึกการอัปเดต"}
+                    </button>
+                  </div>
+
+                  {isClosed ? (
+                    <div
+                      style={{
+                        marginTop: 12,
+                        color: "#6B7280",
+                        fontSize: 14,
+                        textAlign: "right",
+                      }}
+                    >
+                      รายการนี้ปิดงานแล้ว ไม่สามารถอัปเดตต่อได้
                     </div>
-                  ) : (
-                    <div className="text-xs text-gray-500 text-right">
-                      งานนี้ถูกปิดแล้ว (สถานะ: ซ่อมเสร็จแล้ว) — ไม่สามารถอัปเดตต่อได้
-                    </div>
-                  )}
-                </div>
+                  ) : null}
+                </>
+              ) : (
+                <div style={{ color: "#6B7280" }}>ยังไม่มีรายการที่เลือก</div>
               )}
-            </section>
+            </div>
+
+            <div
+              style={{
+                background: "#FFFFFF",
+                borderRadius: 24,
+                padding: 24,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+              }}
+            >
+              <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 16 }}>
+                รายละเอียดการแจ้งซ่อม
+              </h2>
+
+              {selectedRepair ? (
+                <>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 16,
+                      marginBottom: 18,
+                    }}
+                  >
+                    <div>
+                      <div style={{ color: "#6B7280", marginBottom: 4 }}>วันที่แจ้ง</div>
+                      <div style={{ fontWeight: 700 }}>
+                        {formatThaiDateTime(selectedRepair.requestedAt)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ color: "#6B7280", marginBottom: 4 }}>อัปเดตล่าสุด</div>
+                      <div style={{ fontWeight: 700 }}>
+                        {formatThaiDateTime(selectedRepair.updatedAt)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedRepair.beforeImages && selectedRepair.beforeImages.length > 0 ? (
+                    <div style={{ marginBottom: 18 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 10 }}>รูปก่อนซ่อม</div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                          gap: 12,
+                        }}
+                      >
+                        {selectedRepair.beforeImages.map((image) => (
+                          <img
+                            key={image.id}
+                            src={image.fileUrl}
+                            alt="before-repair"
+                            style={{
+                              width: "100%",
+                              height: 180,
+                              objectFit: "cover",
+                              borderRadius: 16,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedRepair.afterImages && selectedRepair.afterImages.length > 0 ? (
+                    <div style={{ marginBottom: 18 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 10 }}>รูปหลังซ่อม</div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                          gap: 12,
+                        }}
+                      >
+                        {selectedRepair.afterImages.map((image) => (
+                          <img
+                            key={image.id}
+                            src={image.fileUrl}
+                            alt="after-repair"
+                            style={{
+                              width: "100%",
+                              height: 180,
+                              objectFit: "cover",
+                              borderRadius: 16,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div style={{ color: "#6B7280" }}>ยังไม่มีรายละเอียดให้แสดง</div>
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#FFFFFF",
+              borderRadius: 24,
+              padding: 24,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+              minHeight: 640,
+            }}
+          >
+            <h2 style={{ fontSize: 30, fontWeight: 700, marginBottom: 16 }}>
+              สถานะงาน
+            </h2>
+
+            {selectedRepair ? (
+              <>
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ color: "#6B7280", marginBottom: 4 }}>
+                    รายการที่เลือก
+                  </div>
+                  <div style={{ fontWeight: 700, lineHeight: 1.7 }}>
+                    {selectedRepair.room.buildingName || selectedRepair.room.buildingCode
+                      ? `ตึก ${selectedRepair.room.buildingName || selectedRepair.room.buildingCode} ห้อง ${selectedRepair.room.roomNumber}`
+                      : `ห้อง ${selectedRepair.room.roomNumber}`}
+                    <br />
+                    ผู้เช่า: {selectedRepair.tenant.fullName || "-"}
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 14 }}>
+                  {(selectedRepair.statusLogs || []).map((log) => {
+                    const style = getStatusColor(log.newStatus);
+                    return (
+                      <div key={log.id} style={{ lineHeight: 1.7 }}>
+                        <div style={{ color: "#6B7280", fontSize: 14 }}>
+                          {formatThaiDate(log.changedAt)}
+                        </div>
+                        <div style={{ fontWeight: 700, color: style.color }}>
+                          • {getStatusLabel(log.newStatus)}
+                        </div>
+                        <div style={{ color: "#4B5563" }}>{log.note || "-"}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div style={{ color: "#6B7280" }}>ยังไม่มีรายการที่เลือก</div>
+            )}
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** ---------- Small components ---------- */
-function LabelValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="text-gray-600">{label}:</div>
-      <div className="text-gray-900">{value}</div>
     </div>
   );
 }

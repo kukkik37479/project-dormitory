@@ -8,6 +8,7 @@ import RoomDetail from "./pages/RoomDetail";
 import Explore from "./pages/Explore";
 import DormPublic from "./pages/DormPublic";
 import OwnerRepairs from "./pages/OwnerRepairs";
+import TenantRepair from "./pages/TenantRepair";
 import BillsGateway from "./pages/BillsGateway";
 import Payments from "./pages/Payments";
 import FurniturePage from "./pages/Furniture";
@@ -22,6 +23,44 @@ import AnnouncementsChat from "./pages/AnnouncementsChat";
 
 function TempPage({ title }: { title: string }) {
   return <div className="p-6 text-xl font-semibold">{title}</div>;
+}
+
+function decodeBase64Url(value: string) {
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return atob(padded);
+  } catch {
+    return "";
+  }
+}
+
+function getRoleFromStoredToken(): string | null {
+  const token =
+    localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+
+  if (!token) return null;
+
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+
+  try {
+    const payloadText = decodeBase64Url(parts[1]);
+    const payload = JSON.parse(payloadText);
+    return payload?.role || null;
+  } catch {
+    return null;
+  }
+}
+
+function RepairsPageSwitch() {
+  const role = getRoleFromStoredToken();
+
+  if (role === "tenant") {
+    return <TenantRepair />;
+  }
+
+  return <OwnerRepairs />;
 }
 
 const router = createBrowserRouter([
@@ -139,7 +178,7 @@ const router = createBrowserRouter([
         path: "repairs",
         element: (
           <RequireRole allow={["owner", "tenant"]}>
-            <OwnerRepairs />
+            <RepairsPageSwitch />
           </RequireRole>
         ),
       },
