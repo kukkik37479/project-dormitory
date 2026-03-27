@@ -52,6 +52,36 @@ function getErrorMessage(err: unknown) {
   return "เกิดข้อผิดพลาด";
 }
 
+function getMonthInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function toMonthValue(value?: string | null) {
+  if (!value) return "";
+
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return getMonthInputValue(parsed);
+  }
+
+  const matched = String(value).match(/^(\d{4})-(\d{2})/);
+  return matched ? `${matched[1]}-${matched[2]}` : "";
+}
+
+function getLatestBillingMonth(items: OwnerPaymentListItem[]) {
+  const months = Array.from(
+    new Set(items.map((item) => toMonthValue(item.billing_month)).filter(Boolean))
+  );
+
+  return months.sort((a, b) => b.localeCompare(a))[0] || "";
+}
+
+function getRoomKey(item: OwnerPaymentListItem) {
+  return `${item.building_name || item.building_code || "-"}::${item.room_number || "-"}`;
+}
+
 function getInvoiceStatusMeta(status: OwnerPaymentInvoiceStatus) {
   switch (status) {
     case "paid":
@@ -267,7 +297,7 @@ function PaymentInfoRow({
   return (
     <div className="flex items-start justify-between gap-3 border-b border-slate-100 py-2 last:border-b-0">
       <div className="text-sm text-slate-500">{label}</div>
-      <div className="max-w-[60%] text-right text-sm font-semibold text-slate-800 break-words">
+      <div className="max-w-[60%] break-words text-right text-sm font-semibold text-slate-800">
         {value}
       </div>
     </div>
@@ -288,18 +318,16 @@ function PaymentMobileCard({
   const meta = getInvoiceStatusMeta(item.invoice_status);
 
   return (
-    <div
-      className={`rounded-2xl border p-4 shadow-sm ${meta.cardClass}`}
-    >
+    <div className={`rounded-2xl border p-4 shadow-sm ${meta.cardClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-base font-extrabold text-slate-900">
             ตึก {item.building_name || item.building_code || "-"} ห้อง {item.room_number}
           </div>
-          <div className="mt-1 text-sm text-slate-600 break-words">
+          <div className="mt-1 break-words text-sm text-slate-600">
             {item.room_type || "-"}
           </div>
-          <div className="mt-1 text-sm text-slate-500 break-words">
+          <div className="mt-1 break-words text-sm text-slate-500">
             ผู้เช่า: {item.tenant_name || "-"}
           </div>
         </div>
@@ -483,11 +511,15 @@ function PaymentDetailModal({
 function ApproveModal({
   open,
   loading,
+  note,
+  onNoteChange,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   loading: boolean;
+  note: string;
+  onNoteChange: (value: string) => void;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -502,6 +534,20 @@ function ApproveModal({
 
         <div className="mt-6 text-center text-xl font-bold text-slate-900 sm:mt-8 sm:text-3xl">
           คุณได้ตรวจสอบความถูกต้องก่อนกดยืนยันใช่หรือไม่
+        </div>
+
+        <div className="mt-6">
+          <label className="mb-2 block text-sm font-semibold text-slate-700">
+            หมายเหตุการตรวจสอบ (ไม่บังคับ)
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => onNoteChange(e.target.value)}
+            rows={4}
+            placeholder="เช่น ผู้เช่าโอนเกิน 120 บาท เจ้าของโอนคืนแล้ววันที่ 28 มี.ค. 2569"
+            className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+            disabled={loading}
+          />
         </div>
 
         <div className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
@@ -599,16 +645,10 @@ export default function Payments() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [month, setMonth] = useState("");
+  const [monthInitialized, setMonthInitialized] = useState(false);
 
   const [items, setItems] = useState<OwnerPaymentListItem[]>([]);
-  const [summary, setSummary] = useState({
-    paidCount: 0,
-    paidAmount: 0,
-    pendingCount: 0,
-    pendingAmount: 0,
-    overdueCount: 0,
-    overdueAmount: 0,
-  });
+  const [summaryItems, setSummaryItems] = useState<OwnerPaymentListItem[]>([]);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -616,33 +656,62 @@ export default function Payments() {
 
   const [approveOpen, setApproveOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [approveNote, setApproveNote] = useState("");
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectPaymentId, setRejectPaymentId] = useState<string | null>(null);
+
+  async function bootstrapMonth() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await getOwnerPayments({
+        status: "all",
+        search: "",
+      });
+
+      const allItems = data.items || [];
+      const currentMonth = getMonthInputValue();
+
+      const hasCurrentMonth = allItems.some(
+        (item) => toMonthValue(item.billing_month) === currentMonth
+      );
+
+      const latestMonth = getLatestBillingMonth(allItems);
+      const nextMonth = hasCurrentMonth ? currentMonth : latestMonth || currentMonth;
+
+      setMonth(nextMonth);
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setMonth(getMonthInputValue());
+    } finally {
+      setMonthInitialized(true);
+      setLoading(false);
+    }
+  }
 
   async function loadPayments() {
     try {
       setLoading(true);
       setError("");
 
-      const data = await getOwnerPayments({
-        month: month || undefined,
-        status,
-        search,
-      });
+      const [tableData, summaryData] = await Promise.all([
+        getOwnerPayments({
+          month: month || undefined,
+          status,
+          search: "",
+        }),
+        getOwnerPayments({
+          month: month || undefined,
+          status: "all",
+          search: "",
+        }),
+      ]);
 
-      setItems(data.items || []);
-      setSummary(
-        data.summary || {
-          paidCount: 0,
-          paidAmount: 0,
-          pendingCount: 0,
-          pendingAmount: 0,
-          overdueCount: 0,
-          overdueAmount: 0,
-        }
-      );
+      setItems(tableData.items || []);
+      setSummaryItems(summaryData.items || []);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -651,9 +720,16 @@ export default function Payments() {
   }
 
   useEffect(() => {
+    if (monthInitialized) return;
+    bootstrapMonth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthInitialized]);
+
+  useEffect(() => {
+    if (!monthInitialized) return;
     loadPayments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, month]);
+  }, [status, month, monthInitialized]);
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -669,6 +745,67 @@ export default function Payments() {
       );
     });
   }, [items, search]);
+
+  const summary = useMemo(() => {
+    const liveStatuses: OwnerPaymentInvoiceStatus[] = [
+      "paid",
+      "pending_review",
+      "unpaid",
+      "overdue",
+    ];
+
+    const liveItems = summaryItems.filter((item) =>
+      liveStatuses.includes(item.invoice_status)
+    );
+
+    const paidRooms = new Set<string>();
+    const pendingRooms = new Set<string>();
+    const unpaidRooms = new Set<string>();
+    const overdueRooms = new Set<string>();
+    const totalRooms = new Set<string>();
+
+    let paidAmount = 0;
+    let pendingAmount = 0;
+    let unpaidAmount = 0;
+    let overdueAmount = 0;
+
+    for (const item of liveItems) {
+      const roomKey = getRoomKey(item);
+      totalRooms.add(roomKey);
+
+      const amount = Number(item.total_amount || 0);
+
+      if (item.invoice_status === "paid") {
+        paidRooms.add(roomKey);
+        paidAmount += amount;
+      } else if (item.invoice_status === "pending_review") {
+        pendingRooms.add(roomKey);
+        pendingAmount += amount;
+      } else if (item.invoice_status === "unpaid") {
+        unpaidRooms.add(roomKey);
+        unpaidAmount += amount;
+      } else if (item.invoice_status === "overdue") {
+        overdueRooms.add(roomKey);
+        overdueAmount += amount;
+      }
+    }
+
+    return {
+      totalRooms: totalRooms.size,
+      paidCount: paidRooms.size,
+      paidAmount,
+      pendingCount: pendingRooms.size,
+      pendingAmount,
+      unpaidCount: unpaidRooms.size,
+      unpaidAmount,
+      overdueCount: overdueRooms.size,
+      overdueAmount,
+    };
+  }, [summaryItems]);
+
+  const selectedMonthLabel = useMemo(() => {
+    return formatMonthLabel(month ? `${month}-01` : null);
+  }, [month]);
 
   async function handleOpenDetail(paymentId?: string | null) {
     if (!paymentId) return;
@@ -692,6 +829,7 @@ export default function Payments() {
   function handleOpenApprove(paymentId?: string | null) {
     if (!paymentId) return;
     setSelectedPaymentId(paymentId);
+    setApproveNote("");
     setApproveOpen(true);
   }
 
@@ -710,11 +848,12 @@ export default function Payments() {
       setError("");
       setSuccess("");
 
-      await approveOwnerPayment(selectedPaymentId);
+      await approveOwnerPayment(selectedPaymentId, approveNote.trim());
 
       setSuccess("ยืนยันการตรวจสอบเรียบร้อยแล้ว");
       setApproveOpen(false);
       setSelectedPaymentId(null);
+      setApproveNote("");
 
       if (detail?.payment_id === selectedPaymentId) {
         setDetailOpen(false);
@@ -764,7 +903,18 @@ export default function Payments() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="rounded-[24px] bg-white/60 p-4 ring-1 ring-slate-200 sm:p-5">
+        <div className="text-sm font-semibold text-slate-500">
+          สรุปตัวเลขของเดือน {selectedMonthLabel}
+        </div>
+        <div className="mt-1 text-sm text-slate-700 sm:text-base">
+          เดือนนี้มีบิลทั้งหมด{" "}
+          <span className="font-bold text-slate-900">{summary.totalRooms}</span>{" "}
+          ห้องที่มีคนเช่าอยู่
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="จ่ายแล้ว"
           amount={summary.paidAmount}
@@ -776,6 +926,12 @@ export default function Payments() {
           amount={summary.pendingAmount}
           count={summary.pendingCount}
           className="bg-gradient-to-r from-amber-500 to-yellow-300"
+        />
+        <SummaryCard
+          title="ยังไม่ชำระ"
+          amount={summary.unpaidAmount}
+          count={summary.unpaidCount}
+          className="bg-gradient-to-r from-sky-600 to-cyan-500"
         />
         <SummaryCard
           title="ค้างชำระ"
@@ -802,6 +958,10 @@ export default function Payments() {
           รายการบิล
         </div>
 
+        <div className="mt-2 text-sm text-slate-500">
+          ข้อมูลด้านล่างอ้างอิงจากเดือน {selectedMonthLabel}
+        </div>
+
         <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_200px] lg:items-center">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
@@ -820,8 +980,8 @@ export default function Payments() {
               <option value="all">ทั้งหมด</option>
               <option value="pending_review">รอตรวจสอบ</option>
               <option value="paid">จ่ายแล้ว</option>
-              <option value="overdue">ค้างชำระ</option>
               <option value="unpaid">ยังไม่ชำระ</option>
+              <option value="overdue">ค้างชำระ</option>
             </select>
           </div>
 
@@ -953,7 +1113,7 @@ export default function Payments() {
 
         <div className="mt-6 text-sm leading-6 text-slate-500">
           ถ้ามีสลิปอัปเดตจะเข้ามาอยู่ในสถานะรอตรวจสอบ • สีเขียว = ตรวจสอบแล้ว
-          • สีแดง = ค้างชำระ
+          • สีฟ้า = ยังไม่ชำระ • สีแดง = ค้างชำระ
         </div>
       </section>
 
@@ -970,10 +1130,13 @@ export default function Payments() {
       <ApproveModal
         open={approveOpen}
         loading={actionLoading}
+        note={approveNote}
+        onNoteChange={setApproveNote}
         onClose={() => {
           if (actionLoading) return;
           setApproveOpen(false);
           setSelectedPaymentId(null);
+          setApproveNote("");
         }}
         onConfirm={handleConfirmApprove}
       />
