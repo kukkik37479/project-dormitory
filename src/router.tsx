@@ -22,6 +22,7 @@ import TestMap from "./pages/TestMap";
 import MyRoom from "./pages/MyRoom";
 import AnnouncementsChat from "./pages/AnnouncementsChat";
 import Reviews from "./pages/Reviews";
+import Overview from "./pages/Overview";
 
 function TempPage({ title }: { title: string }) {
   return <div className="p-6 text-xl font-semibold">{title}</div>;
@@ -166,7 +167,7 @@ const router = createBrowserRouter([
         path: "overview",
         element: (
           <RequireRole allow={["owner"]}>
-            <TempPage title="ภาพรวม" />
+            <Overview />
           </RequireRole>
         ),
       },
