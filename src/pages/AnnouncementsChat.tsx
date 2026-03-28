@@ -8,6 +8,7 @@ import {
   FiTrash2,
   FiVolume2,
 } from "react-icons/fi";
+import { supabase } from "../supabase";
 import type { Announcement } from "../types/announcement";
 import type { ChatConversation, ChatMessage } from "../types/chat";
 import {
@@ -23,6 +24,7 @@ import {
 } from "../service/chat.service";
 
 const MOBILE_BREAKPOINT = 768;
+const REALTIME_REFRESH_DELAY = 250;
 
 function getStoredToken(): string | null {
   const candidateKeys = [
@@ -154,6 +156,18 @@ function getConversationPreview(conversation: ChatConversation) {
   return conversation.last_message_text || "ยังไม่มีข้อความ";
 }
 
+function sortMessagesByCreatedAt(list: ChatMessage[]) {
+  return [...list].sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return timeA - timeB;
+  });
+}
+
+type LoadOptions = {
+  silent?: boolean;
+};
+
 export default function AnnouncementsChat() {
   const [activeTab, setActiveTab] = useState<"announcement" | "chat">("chat");
   const [isMobile, setIsMobile] = useState<boolean>(() => {
@@ -187,11 +201,19 @@ export default function AnnouncementsChat() {
   const [error, setError] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const selectedConversationIdRef = useRef<string | null>(null);
+  const isChatDetailVisibleRef = useRef(false);
+  const shouldStickToBottomRef = useRef(true);
+  const announcementsRefreshTimerRef = useRef<number | null>(null);
+  const conversationsRefreshTimerRef = useRef<number | null>(null);
+
   const currentUserId = useMemo(() => getCurrentUserId(), []);
   const currentUserRole = useMemo(() => getCurrentUserRole(), []);
   const currentDormId = useMemo(() => getCurrentDormId(), []);
 
   const isOwner = currentUserRole === "owner";
+  const isChatDetailVisible = !isMobile || mobileChatView === "detail";
 
   const totalUnread = useMemo(
     () => conversations.reduce((sum, item) => sum + item.unread_count, 0),
@@ -227,18 +249,62 @@ export default function AnnouncementsChat() {
   const showChatList = !isMobile || mobileChatView === "list";
   const showChatDetail = !isMobile || mobileChatView === "detail";
 
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
+  useEffect(() => {
+    isChatDetailVisibleRef.current = isChatDetailVisible;
+  }, [isChatDetailVisible]);
+
+  useEffect(() => {
+    return () => {
+      if (announcementsRefreshTimerRef.current) {
+        window.clearTimeout(announcementsRefreshTimerRef.current);
+      }
+      if (conversationsRefreshTimerRef.current) {
+        window.clearTimeout(conversationsRefreshTimerRef.current);
+      }
+    };
+  }, []);
+
+  function isNearBottom() {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+
+    return distanceFromBottom < 120;
+  }
+
   function scrollMessagesToBottom(behavior: ScrollBehavior = "smooth") {
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({
+      const container = messagesContainerRef.current;
+      if (!container) return;
+
+      if (behavior === "auto") {
+        container.scrollTop = container.scrollHeight;
+        return;
+      }
+
+      container.scrollTo({
+        top: container.scrollHeight,
         behavior,
-        block: "end",
       });
     });
   }
 
-  async function loadConversations(keepSelected = true) {
+  async function loadConversations(
+    keepSelected = true,
+    options: LoadOptions = {}
+  ) {
+    const { silent = false } = options;
+
     try {
-      setLoadingConversations(true);
+      if (!silent) {
+        setLoadingConversations(true);
+      }
       setError("");
 
       const data = await getChatConversations();
@@ -250,8 +316,10 @@ export default function AnnouncementsChat() {
         return;
       }
 
-      if (keepSelected && selectedConversationId) {
-        const stillExists = data.some((item) => item.id === selectedConversationId);
+      if (keepSelected && selectedConversationIdRef.current) {
+        const stillExists = data.some(
+          (item) => item.id === selectedConversationIdRef.current
+        );
         if (stillExists) return;
       }
 
@@ -259,17 +327,27 @@ export default function AnnouncementsChat() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "โหลดรายการแชทไม่สำเร็จ");
     } finally {
-      setLoadingConversations(false);
+      if (!silent) {
+        setLoadingConversations(false);
+      }
     }
   }
 
-  async function loadMessages(conversationId: string, shouldMarkAsRead = true) {
+  async function loadMessages(
+    conversationId: string,
+    shouldMarkAsRead = true,
+    options: LoadOptions = {}
+  ) {
+    const { silent = false } = options;
+
     try {
-      setLoadingMessages(true);
+      if (!silent) {
+        setLoadingMessages(true);
+      }
       setError("");
 
       const data = await getChatMessages(conversationId);
-      setMessages(data);
+      setMessages(sortMessagesByCreatedAt(data));
 
       if (shouldMarkAsRead) {
         await markChatAsRead(conversationId);
@@ -279,17 +357,23 @@ export default function AnnouncementsChat() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "โหลดข้อความไม่สำเร็จ");
     } finally {
-      setLoadingMessages(false);
+      if (!silent) {
+        setLoadingMessages(false);
+      }
     }
   }
 
-  async function loadAnnouncements() {
+  async function loadAnnouncements(options: LoadOptions = {}) {
+    const { silent = false } = options;
+
     try {
       if (!currentDormId) {
         throw new Error("ไม่พบ dormId สำหรับโหลดประกาศ");
       }
 
-      setLoadingAnnouncements(true);
+      if (!silent) {
+        setLoadingAnnouncements(true);
+      }
       setError("");
 
       const data = await getAnnouncements(currentDormId);
@@ -297,8 +381,30 @@ export default function AnnouncementsChat() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "โหลดประกาศไม่สำเร็จ");
     } finally {
-      setLoadingAnnouncements(false);
+      if (!silent) {
+        setLoadingAnnouncements(false);
+      }
     }
+  }
+
+  function scheduleAnnouncementsRefresh() {
+    if (announcementsRefreshTimerRef.current) {
+      window.clearTimeout(announcementsRefreshTimerRef.current);
+    }
+
+    announcementsRefreshTimerRef.current = window.setTimeout(() => {
+      loadAnnouncements({ silent: true });
+    }, REALTIME_REFRESH_DELAY);
+  }
+
+  function scheduleConversationsRefresh() {
+    if (conversationsRefreshTimerRef.current) {
+      window.clearTimeout(conversationsRefreshTimerRef.current);
+    }
+
+    conversationsRefreshTimerRef.current = window.setTimeout(() => {
+      loadConversations(true, { silent: true });
+    }, REALTIME_REFRESH_DELAY);
   }
 
   useEffect(() => {
@@ -329,17 +435,138 @@ export default function AnnouncementsChat() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTab !== "announcement") return;
+    if (!currentDormId) return;
+
+    const channel = supabase
+      .channel(`announcements-realtime-${currentDormId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "announcements",
+          filter: `dorm_id=eq.${currentDormId}`,
+        },
+        () => {
+          scheduleAnnouncementsRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, currentDormId]);
+
+  useEffect(() => {
+    if (activeTab !== "chat") return;
+    if (!currentDormId) return;
+
+    const channel = supabase
+      .channel(`chat-conversations-realtime-${currentDormId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_conversations",
+          filter: `dorm_id=eq.${currentDormId}`,
+        },
+        () => {
+          scheduleConversationsRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, currentDormId]);
+
+  useEffect(() => {
+    if (activeTab !== "chat") return;
+    if (!selectedConversationId) return;
+    if (!isChatDetailVisible) return;
+
+    const channel = supabase
+      .channel(`chat-messages-realtime-${selectedConversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_messages",
+          filter: `conversation_id=eq.${selectedConversationId}`,
+        },
+        async (payload) => {
+          const eventType = payload.eventType;
+          const newRow = payload.new as ChatMessage;
+          const oldRow = payload.old as ChatMessage;
+
+          if (eventType === "INSERT" && newRow?.id) {
+            setMessages((prev) => {
+              if (prev.some((item) => item.id === newRow.id)) return prev;
+              return sortMessagesByCreatedAt([...prev, newRow]);
+            });
+
+            if (newRow.sender_user_id === currentUserId) {
+              shouldStickToBottomRef.current = true;
+            }
+
+            if (
+              newRow.sender_user_id &&
+              currentUserId &&
+              newRow.sender_user_id !== currentUserId
+            ) {
+              markChatAsRead(selectedConversationId).catch(() => undefined);
+            }
+
+            scheduleConversationsRefresh();
+            return;
+          }
+
+          if (eventType === "UPDATE" && newRow?.id) {
+            setMessages((prev) =>
+              sortMessagesByCreatedAt(
+                prev.map((item) => (item.id === newRow.id ? newRow : item))
+              )
+            );
+            scheduleConversationsRefresh();
+            return;
+          }
+
+          if (eventType === "DELETE" && oldRow?.id) {
+            setMessages((prev) => prev.filter((item) => item.id !== oldRow.id));
+            scheduleConversationsRefresh();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeTab, selectedConversationId, isChatDetailVisible, currentUserId]);
+
+  useEffect(() => {
     if (!selectedConversationId || activeTab !== "chat") return;
     if (isMobile && mobileChatView !== "detail") return;
 
+    shouldStickToBottomRef.current = true;
     loadMessages(selectedConversationId, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversationId, activeTab, isMobile, mobileChatView]);
 
   useEffect(() => {
     if (activeTab !== "chat") return;
+    if (!isChatDetailVisible) return;
+    if (!shouldStickToBottomRef.current) return;
+
     scrollMessagesToBottom(messages.length <= 1 ? "auto" : "smooth");
-  }, [messages, activeTab]);
+  }, [messages, activeTab, isChatDetailVisible]);
 
   async function handleSendMessage() {
     if (!selectedConversationId || !messageText.trim() || sending) return;
@@ -347,12 +574,10 @@ export default function AnnouncementsChat() {
     try {
       setSending(true);
       setError("");
+      shouldStickToBottomRef.current = true;
 
       await sendChatMessage(selectedConversationId, messageText.trim());
       setMessageText("");
-
-      await loadMessages(selectedConversationId, false);
-      await loadConversations(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "ส่งข้อความไม่สำเร็จ");
     } finally {
@@ -380,8 +605,7 @@ export default function AnnouncementsChat() {
       setAnnouncementContent("");
       setAnnouncementDate(new Date().toISOString().slice(0, 10));
       setShowAnnouncementModal(false);
-
-      await loadAnnouncements();
+      scheduleAnnouncementsRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "สร้างประกาศไม่สำเร็จ");
     } finally {
@@ -398,13 +622,14 @@ export default function AnnouncementsChat() {
     try {
       setError("");
       await deleteAnnouncement(announcementId, currentDormId);
-      await loadAnnouncements();
+      scheduleAnnouncementsRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "ลบประกาศไม่สำเร็จ");
     }
   }
 
   function handleSelectConversation(conversationId: string) {
+    shouldStickToBottomRef.current = true;
     setSelectedConversationId(conversationId);
     if (isMobile) {
       setMobileChatView("detail");
@@ -1138,6 +1363,10 @@ export default function AnnouncementsChat() {
               </div>
 
               <div
+                ref={messagesContainerRef}
+                onScroll={() => {
+                  shouldStickToBottomRef.current = isNearBottom();
+                }}
                 style={{
                   flex: 1,
                   overflowY: "auto",
