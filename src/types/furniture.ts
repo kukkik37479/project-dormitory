@@ -5,6 +5,20 @@ export type FurnitureUsageStatus =
   | "disposed"
   | "missing";
 
+export type FurnitureRepairStatus =
+  | "pending"
+  | "in_progress"
+  | "waiting_parts"
+  | "completed"
+  | "cancelled";
+
+export type FurnitureRepairCategory =
+  | "electrical"
+  | "water"
+  | "furniture"
+  | "room"
+  | "other";
+
 export type FurnitureBuilding = {
   id: string;
   dormId: string;
@@ -38,6 +52,34 @@ export type FurnitureCategory = {
   updatedAt: string;
 };
 
+export type FurnitureRepairSummary = {
+  totalRepairs: number;
+  openRepairs: number;
+  completedRepairs: number;
+  cancelledRepairs: number;
+  hasOpenRepair: boolean;
+  lastReportedAt: string | null;
+  lastCompletedAt: string | null;
+  latestStatus: FurnitureRepairStatus | null;
+};
+
+export type FurnitureRepairHistoryItem = {
+  id: string;
+  furnitureItemId: string;
+  title: string;
+  description: string;
+  category: FurnitureRepairCategory;
+  priority: "low" | "medium" | "high" | "urgent";
+  status: FurnitureRepairStatus;
+  ownerNote: string | null;
+  requestedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  beforeImageUrl: string | null;
+  afterImageUrl: string | null;
+};
+
 export type FurnitureItem = {
   id: string;
   dormId: string;
@@ -64,6 +106,8 @@ export type FurnitureItem = {
   remainingLifespanMonths: number | null;
   createdAt: string;
   updatedAt: string;
+  repairSummary: FurnitureRepairSummary;
+  repairHistory: FurnitureRepairHistoryItem[];
 };
 
 export type FurnitureRoomsResponse = {
@@ -89,7 +133,16 @@ export type FurnitureRoomItemsResponse = {
     tenantName: string | null;
     roomLabel: string;
   };
+  summary: {
+    totalFurnitureItems: number;
+    totalRepairRequests: number;
+    openRepairRequests: number;
+    completedRepairRequests: number;
+  };
   items: FurnitureItem[];
+  roomRepairHistory: FurnitureRepairHistoryItem[];
+  roomCompletedRepairHistory: FurnitureRepairHistoryItem[];
+  roomOpenRepairHistory: FurnitureRepairHistoryItem[];
 };
 
 export type FurnitureCategoriesResponse = {

@@ -6,6 +6,8 @@ import {
 } from "../service/furniture";
 import type {
   FurnitureItem,
+  FurnitureRepairHistoryItem,
+  FurnitureRepairStatus,
   FurnitureRoomItemsResponse,
 } from "../types/furniture";
 import FurnitureItemModal from "../components/furniture/FurnitureItemModal";
@@ -15,6 +17,13 @@ function formatDate(date?: string | null) {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString("th-TH");
+}
+
+function formatDateTime(date?: string | null) {
+  if (!date) return "-";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("th-TH");
 }
 
 function formatPrice(price?: number | null) {
@@ -82,6 +91,40 @@ function getUsageBadgeClass(value: FurnitureItem["usageStatus"]) {
   }
 }
 
+function getRepairStatusLabel(value?: FurnitureRepairStatus | null) {
+  switch (value) {
+    case "pending":
+      return "รอดำเนินการ";
+    case "in_progress":
+      return "กำลังดำเนินการ";
+    case "waiting_parts":
+      return "รออะไหล่";
+    case "completed":
+      return "ซ่อมเสร็จแล้ว";
+    case "cancelled":
+      return "ยกเลิก";
+    default:
+      return "-";
+  }
+}
+
+function getRepairStatusBadgeClass(value?: FurnitureRepairStatus | null) {
+  switch (value) {
+    case "pending":
+      return "bg-amber-100 text-amber-700";
+    case "in_progress":
+      return "bg-sky-100 text-sky-700";
+    case "waiting_parts":
+      return "bg-violet-100 text-violet-700";
+    case "completed":
+      return "bg-emerald-100 text-emerald-700";
+    case "cancelled":
+      return "bg-rose-100 text-rose-700";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
 function getRemainingMonthsText(item: FurnitureItem) {
   if (item.lifespanMonths === null || item.lifespanMonths === undefined) {
     return "-";
@@ -90,6 +133,104 @@ function getRemainingMonthsText(item: FurnitureItem) {
   const used = item.monthsUsed ?? 0;
   const remaining = Math.max(0, item.lifespanMonths - used);
   return `${remaining} เดือน`;
+}
+
+function RepairTable({
+  rows,
+  emptyMessage,
+}: {
+  rows: FurnitureRepairHistoryItem[];
+  emptyMessage: string;
+}) {
+  if (rows.length === 0) {
+    return (
+      <div className="p-6 text-center text-sm text-slate-500">{emptyMessage}</div>
+    );
+  }
+
+  return (
+    <>
+      <div className="hidden grid-cols-6 bg-slate-50 text-sm font-semibold text-slate-700 md:grid">
+        <div className="px-4 py-3">วันที่แจ้ง</div>
+        <div className="px-4 py-3">เฟอร์นิเจอร์</div>
+        <div className="px-4 py-3">รายการ</div>
+        <div className="px-4 py-3">รายละเอียด</div>
+        <div className="px-4 py-3">สถานะ</div>
+        <div className="px-4 py-3">วันที่เสร็จ</div>
+      </div>
+
+      <div className="divide-y divide-slate-200">
+        {rows.map((repair) => (
+          <div key={repair.id} className="p-4">
+            <div className="grid gap-3 md:grid-cols-6 md:items-start">
+              <div>
+                <div className="text-xs font-semibold text-slate-400 md:hidden">
+                  วันที่แจ้ง
+                </div>
+                <div className="text-sm text-slate-700">
+                  {formatDate(repair.requestedAt || repair.createdAt)}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold text-slate-400 md:hidden">
+                  เฟอร์นิเจอร์
+                </div>
+                <div className="text-sm font-medium text-slate-900">
+                  {repair.title?.replace(/^แจ้งซ่อม/, "") || "-"}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold text-slate-400 md:hidden">
+                  รายการ
+                </div>
+                <div className="text-sm font-medium text-slate-900">
+                  {repair.title || "-"}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold text-slate-400 md:hidden">
+                  รายละเอียด
+                </div>
+                <div className="whitespace-pre-line text-sm text-slate-700">
+                  {repair.description || "-"}
+                </div>
+                {repair.ownerNote ? (
+                  <div className="mt-2 text-xs text-slate-500">
+                    หมายเหตุเจ้าของ: {repair.ownerNote}
+                  </div>
+                ) : null}
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold text-slate-400 md:hidden">
+                  สถานะ
+                </div>
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getRepairStatusBadgeClass(
+                    repair.status
+                  )}`}
+                >
+                  {getRepairStatusLabel(repair.status)}
+                </span>
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold text-slate-400 md:hidden">
+                  วันที่เสร็จ
+                </div>
+                <div className="text-sm text-slate-700">
+                  {formatDate(repair.completedAt)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
 }
 
 export default function FurnitureRoomDetail() {
@@ -109,6 +250,10 @@ export default function FurnitureRoomDetail() {
 
   const room = response?.room ?? null;
   const items = response?.items ?? [];
+  const summary = response?.summary ?? null;
+  const roomRepairHistory = response?.roomRepairHistory ?? [];
+  const roomCompletedRepairHistory = response?.roomCompletedRepairHistory ?? [];
+  const roomOpenRepairHistory = response?.roomOpenRepairHistory ?? [];
 
   async function loadData() {
     if (!roomId) return;
@@ -204,6 +349,8 @@ export default function FurnitureRoomDetail() {
                 <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 sm:text-sm">
                   <span>รายการทั้งหมด {items.length} รายการ</span>
                   <span>จำนวนรวม {totalItems} ชิ้น</span>
+                  <span>งานซ่อมทั้งหมด {summary?.totalRepairRequests ?? 0} รายการ</span>
+                  <span>งานค้าง {summary?.openRepairRequests ?? 0} รายการ</span>
                 </div>
               </div>
             )}
@@ -231,6 +378,33 @@ export default function FurnitureRoomDetail() {
         </div>
       ) : (
         <>
+          <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+              <div className="text-sm text-slate-500">เฟอร์นิเจอร์ทั้งหมด</div>
+              <div className="mt-2 text-2xl font-bold text-slate-900">
+                {summary?.totalFurnitureItems ?? items.length}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+              <div className="text-sm text-slate-500">งานซ่อมทั้งหมด</div>
+              <div className="mt-2 text-2xl font-bold text-slate-900">
+                {summary?.totalRepairRequests ?? 0}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+              <div className="text-sm text-slate-500">งานซ่อมค้าง</div>
+              <div className="mt-2 text-2xl font-bold text-amber-600">
+                {summary?.openRepairRequests ?? 0}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+              <div className="text-sm text-slate-500">ซ่อมเสร็จแล้ว</div>
+              <div className="mt-2 text-2xl font-bold text-emerald-600">
+                {summary?.completedRepairRequests ?? 0}
+              </div>
+            </div>
+          </section>
+
           <section className="space-y-4">
             {items.length === 0 ? (
               <div className="rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-slate-200 sm:p-10">
@@ -244,7 +418,7 @@ export default function FurnitureRoomDetail() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-2">
+              <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
                 {items.map((item) => {
                   const isExpanded = expandedItemIds.includes(item.id);
 
@@ -282,7 +456,7 @@ export default function FurnitureRoomDetail() {
                                   </h2>
 
                                   <p className="mt-2 text-sm text-slate-500 sm:text-base">
-                                    {(item.categoryName || "เฟอร์นิเจอร์")}
+                                    {item.categoryName || "เฟอร์นิเจอร์"}
                                     {item.color ? ` • ${item.color}` : ""}
                                     {item.quantity ? ` • x${item.quantity}` : ""}
                                   </p>
@@ -304,12 +478,20 @@ export default function FurnitureRoomDetail() {
                                     ? ` หมดอายุ: ${formatDate(item.warrantyExpiry)}`
                                     : ""}
                                 </div>
+                                <div>• อายุคงเหลือ ~ {getRemainingMonthsText(item)}</div>
                                 <div>
-                                  • อายุคงเหลือ ~ {getRemainingMonthsText(item)}
+                                  • เคยแจ้งซ่อม: {item.repairSummary?.totalRepairs ?? 0} ครั้ง
+                                </div>
+                                <div>
+                                  • งานค้าง: {item.repairSummary?.openRepairs ?? 0} งาน
+                                </div>
+                                <div>
+                                  • ล่าสุด:{" "}
+                                  {formatDate(item.repairSummary?.lastReportedAt || null)}
                                 </div>
                               </div>
 
-                              <div className="mt-3">
+                              <div className="mt-3 flex flex-wrap gap-2">
                                 <span
                                   className={`inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ${getUsageBadgeClass(
                                     item.usageStatus
@@ -317,6 +499,12 @@ export default function FurnitureRoomDetail() {
                                 >
                                   สถานะ : {getUsageLabel(item.usageStatus)}
                                 </span>
+
+                                {item.repairSummary?.hasOpenRepair ? (
+                                  <span className="inline-flex rounded-full bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-700">
+                                    มีงานซ่อมค้าง
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           </div>
@@ -400,6 +588,40 @@ export default function FurnitureRoomDetail() {
                               </div>
                             </div>
 
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">
+                                แจ้งซ่อมทั้งหมด
+                              </div>
+                              <div className="mt-1 text-xl font-semibold text-slate-900">
+                                {item.repairSummary?.totalRepairs ?? 0}
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">งานค้าง</div>
+                              <div className="mt-1 text-xl font-semibold text-amber-600">
+                                {item.repairSummary?.openRepairs ?? 0}
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">
+                                ซ่อมเสร็จแล้ว
+                              </div>
+                              <div className="mt-1 text-xl font-semibold text-emerald-600">
+                                {item.repairSummary?.completedRepairs ?? 0}
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl bg-slate-50 px-4 py-3">
+                              <div className="text-sm text-slate-500">
+                                แจ้งล่าสุด
+                              </div>
+                              <div className="mt-1 font-medium text-slate-900">
+                                {formatDateTime(item.repairSummary?.lastReportedAt)}
+                              </div>
+                            </div>
+
                             <div className="sm:col-span-2 rounded-xl bg-slate-50 px-4 py-3">
                               <div className="text-sm text-slate-500">สภาพ</div>
                               <div className="mt-2">
@@ -419,6 +641,22 @@ export default function FurnitureRoomDetail() {
                                 {item.note || "-"}
                               </div>
                             </div>
+                          </div>
+
+                          <div className="mt-5 rounded-2xl border border-slate-200">
+                            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                              <h3 className="text-sm font-bold text-slate-900">
+                                ประวัติแจ้งซ่อมของ {item.itemName}
+                              </h3>
+                              <p className="mt-1 text-xs text-slate-500">
+                                แสดงรายการซ่อมทั้งหมดที่ผูกกับเฟอร์นิเจอร์ชิ้นนี้
+                              </p>
+                            </div>
+
+                            <RepairTable
+                              rows={item.repairHistory || []}
+                              emptyMessage="ยังไม่มีประวัติแจ้งซ่อมของเฟอร์นิเจอร์ชิ้นนี้"
+                            />
                           </div>
 
                           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -452,25 +690,59 @@ export default function FurnitureRoomDetail() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
-                  ประวัติการแจ้งซ่อมที่ซ่อมเสร็จแล้ว
+                  งานซ่อมที่กำลังดำเนินการในห้องนี้
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  เดี๋ยวขั้นถัดไปค่อยเชื่อม API ประวัติซ่อม
+                  รวมงานซ่อมของเฟอร์นิเจอร์ในห้องที่ยังไม่ปิดงาน
                 </p>
               </div>
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-              <div className="hidden grid-cols-4 bg-slate-50 text-sm font-semibold text-slate-700 md:grid">
-                <div className="px-4 py-3">วันที่แจ้ง</div>
-                <div className="px-4 py-3">รายการ</div>
-                <div className="px-4 py-3">รายละเอียด</div>
-                <div className="px-4 py-3">สถานะ</div>
-              </div>
+              <RepairTable
+                rows={roomOpenRepairHistory}
+                emptyMessage="ยังไม่มีงานซ่อมค้างในห้องนี้"
+              />
+            </div>
+          </section>
 
-              <div className="p-6 text-center text-sm text-slate-500">
-                ยังไม่ได้เชื่อมข้อมูลประวัติซ่อม
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  ประวัติการแจ้งซ่อมที่ซ่อมเสร็จแล้ว
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  แสดงรายการซ่อมของเฟอร์นิเจอร์ในห้องนี้ที่ปิดงานแล้ว
+                </p>
               </div>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+              <RepairTable
+                rows={roomCompletedRepairHistory}
+                emptyMessage="ยังไม่มีประวัติการแจ้งซ่อมที่ซ่อมเสร็จแล้ว"
+              />
+            </div>
+          </section>
+
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  ประวัติแจ้งซ่อมทั้งหมดในห้องนี้
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  รวมทั้งงานค้าง งานซ่อมเสร็จ และงานที่ยกเลิก
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+              <RepairTable
+                rows={roomRepairHistory}
+                emptyMessage="ยังไม่มีประวัติแจ้งซ่อมในห้องนี้"
+              />
             </div>
           </section>
         </>
