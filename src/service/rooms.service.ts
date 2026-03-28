@@ -124,6 +124,30 @@ export async function createRoom(data: {
   return result;
 }
 
+export async function updateRoomStatus(
+  roomId: string,
+  status: "vacant" | "maintenance"
+) {
+  const token = getToken();
+
+  const res = await fetch(`${API_URL}/${roomId}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ status }),
+  });
+
+  const result = await parseResponse(res);
+
+  if (!res.ok) {
+    throw new Error(result.message || "อัปเดตสถานะห้องไม่สำเร็จ");
+  }
+
+  return result;
+}
+
 export async function getRoomDetail(roomId: string) {
   const token = getToken();
 

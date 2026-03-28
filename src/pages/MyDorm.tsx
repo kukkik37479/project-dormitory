@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { getVacantRooms } from "../service/rooms.service";
 import {
@@ -14,6 +14,9 @@ import {
   updateMyDormProfile,
   createDormAmenity,
   deleteDormAmenity,
+  getVacancyAnnouncements,
+  createVacancyAnnouncement,
+  deleteVacancyAnnouncement,
 } from "../service/myDorm.service";
 
 const LOCAL_CACHE_KEY = "my_dorm_local_cache_v1";
@@ -54,13 +57,40 @@ type ImageItem = {
 };
 
 type AnnouncementItem = {
+  id: string;
+  room_id: string;
   room_no: string;
   room_type: string;
   floor: string;
   building: string;
   size_sqm: string;
   price: string;
-  status: "available" | "reserved" | "hidden";
+  status: "draft" | "published";
+  note: string | null;
+  published_at: string | null;
+  created_at: string;
+};
+
+type VacancyAnnouncementApiItem = {
+  id: string;
+  dorm_id: string;
+  room_id: string;
+  created_by: string;
+  status: "draft" | "published" | "archived";
+  note?: string | null;
+  published_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  room_number: string;
+  floor_no: number | string;
+  monthly_rent: number | string;
+  room_type: string;
+  room_status: string;
+  building_code?: string | null;
+  building_display_name?: string | null;
+  size_sqm?: number | string | null;
+  room_layout?: string | null;
+  created_by_name?: string | null;
 };
 
 type DormProfile = {
@@ -118,7 +148,6 @@ type LocalCache = {
   roomTypes: RoomTypeItem[];
   phones: PhoneItem[];
   images: ImageItem[];
-  announcements: AnnouncementItem[];
 };
 
 type MyDormResponse = {
@@ -172,16 +201,6 @@ const emptyRoomType: RoomTypeItem = {
   size_sqm: "",
   price_min: "",
   price_max: "",
-};
-
-const emptyAnnouncement: AnnouncementItem = {
-  room_no: "A-101",
-  room_type: "ห้องแอร์",
-  floor: "1",
-  building: "อาคาร A",
-  size_sqm: "28",
-  price: "4500",
-  status: "available",
 };
 
 function parseNullableNumber(value: string) {
@@ -333,6 +352,51 @@ function getRoomStatusLabel(status: string) {
   return status || "-";
 }
 
+function getAnnouncementStatusLabel(status: "draft" | "published") {
+  if (status === "draft") return "แบบร่าง";
+  return "พร้อมแสดง";
+}
+
+function getAnnouncementStatusClass(status: "draft" | "published") {
+  if (status === "draft") {
+    return "bg-amber-100 text-amber-700";
+  }
+
+  return "bg-green-100 text-green-700";
+}
+
+function mapVacancyAnnouncementToUi(
+  item: VacancyAnnouncementApiItem
+): AnnouncementItem {
+  return {
+    id: item.id,
+    room_id: item.room_id,
+    room_no: item.room_number || "",
+    room_type: item.room_type || "",
+    floor: String(item.floor_no ?? ""),
+    building:
+      item.building_display_name ||
+      (item.building_code ? `อาคาร ${item.building_code}` : ""),
+    size_sqm:
+      item.size_sqm == null || item.size_sqm === ""
+        ? "-"
+        : String(item.size_sqm),
+    price: String(item.monthly_rent ?? 0),
+    status: item.status === "draft" ? "draft" : "published",
+    note: item.note ?? null,
+    published_at: item.published_at ?? null,
+    created_at: item.created_at,
+  };
+}
+
+function getVacantRoomOptionLabel(room: VacantRoomItem) {
+  const building =
+    room.building_display_name ||
+    (room.building_code ? `อาคาร ${room.building_code}` : "อาคาร");
+
+  return `ห้อง ${room.room_number} ${building} ชั้น ${room.floor_no}`;
+}
+
 export default function MyDorm() {
   const token =
     localStorage.getItem("token") || sessionStorage.getItem("token");
@@ -344,6 +408,14 @@ export default function MyDorm() {
   const [error, setError] = useState("");
   const [vacantRooms, setVacantRooms] = useState<VacantRoomItem[]>([]);
   const [loadingVacantRooms, setLoadingVacantRooms] = useState(false);
+  const [loadingVacancyAnnouncements, setLoadingVacancyAnnouncements] =
+    useState(false);
+  const [selectedVacantRoomId, setSelectedVacantRoomId] = useState("");
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [submittingAnnouncement, setSubmittingAnnouncement] = useState(false);
+  const [removingAnnouncementId, setRemovingAnnouncementId] = useState<
+    string | null
+  >(null);
 
   const [form, setForm] = useState<DormForm>(initialForm);
   const [amenities, setAmenities] = useState<AmenityValue[]>([]);
@@ -358,13 +430,86 @@ export default function MyDorm() {
   ]);
   const [images, setImages] = useState<ImageItem[]>([]);
   const [removedImagePaths, setRemovedImagePaths] = useState<string[]>([]);
-  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([
-    { ...emptyAnnouncement },
-  ]);
 
-  const visibleAnnouncements = announcements.filter(
-    (item) => item.status !== "hidden"
+  const announcedRoomIds = useMemo(
+    () => new Set(announcements.map((item) => item.room_id)),
+    [announcements]
   );
+
+  const selectedVacantRoom = useMemo(
+    () => vacantRooms.find((item) => item.id === selectedVacantRoomId) || null,
+    [vacantRooms, selectedVacantRoomId]
+  );
+
+  const loadVacancyAnnouncements = async () => {
+    try {
+      setLoadingVacancyAnnouncements(true);
+      const data = await getVacancyAnnouncements();
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      setAnnouncements(rows.map(mapVacancyAnnouncementToUi));
+    } catch (err) {
+      console.error("loadVacancyAnnouncements error:", err);
+      setAnnouncements([]);
+    } finally {
+      setLoadingVacancyAnnouncements(false);
+    }
+  };
+
+  const loadVacantRooms = async () => {
+    try {
+      setLoadingVacantRooms(true);
+      const data = await getVacantRooms();
+      setVacantRooms(data.rooms || []);
+    } catch (err) {
+      console.error("loadVacantRooms error:", err);
+      setVacantRooms([]);
+    } finally {
+      setLoadingVacantRooms(false);
+    }
+  };
+
+  const handleCreateAnnouncementFromRoom = async (room: VacantRoomItem) => {
+    try {
+      setMessage("");
+      setError("");
+      setSubmittingAnnouncement(true);
+
+      await createVacancyAnnouncement({
+        room_id: room.id,
+        status: "published",
+      });
+
+      await Promise.all([loadVacancyAnnouncements(), loadVacantRooms()]);
+      setMessage(`สร้างประกาศห้อง ${room.room_number} เรียบร้อยแล้ว`);
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error ? err.message : "สร้างประกาศห้องว่างไม่สำเร็จ"
+      );
+    } finally {
+      setSubmittingAnnouncement(false);
+    }
+  };
+
+  const handleHideAnnouncement = async (announcementId: string) => {
+    try {
+      setMessage("");
+      setError("");
+      setRemovingAnnouncementId(announcementId);
+
+      await deleteVacancyAnnouncement(announcementId);
+      await Promise.all([loadVacancyAnnouncements(), loadVacantRooms()]);
+
+      setMessage("นำประกาศออกจากรายการแล้ว");
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error ? err.message : "ลบประกาศห้องว่างไม่สำเร็จ"
+      );
+    } finally {
+      setRemovingAnnouncementId(null);
+    }
+  };
 
   const handlePickLocation = async (lat: number, lng: number) => {
     setForm((prev) => ({
@@ -414,12 +559,13 @@ export default function MyDorm() {
       try {
         const data: MyDormResponse = await getMyDormProfile();
         const dorm = data.dorm || {};
+        const cached = loadLocalCache();
+
         setAmenityOptions(
           dorm.amenity_options && dorm.amenity_options.length
             ? dorm.amenity_options
             : []
         );
-        const cached = loadLocalCache();
 
         setForm({
           name: dorm.name || "",
@@ -476,12 +622,6 @@ export default function MyDorm() {
         );
 
         setRemovedImagePaths([]);
-
-        setAnnouncements(
-          cached?.announcements?.length
-            ? cached.announcements
-            : [{ ...emptyAnnouncement }]
-        );
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้"
@@ -511,27 +651,29 @@ export default function MyDorm() {
           sort_order: item.sort_order,
           public_id: item.public_id ?? null,
         })),
-      announcements,
     });
-  }, [amenities, roomTypes, phones, images, announcements, loading]);
+  }, [amenities, roomTypes, phones, images, loading]);
 
   useEffect(() => {
-  const loadVacantRooms = async () => {
-    try {
-      setLoadingVacantRooms(true);
-      const data = await getVacantRooms();
-      setVacantRooms(data.rooms || []);
-    } catch (err) {
-      console.error("loadVacantRooms error:", err);
-      setVacantRooms([]);
-    } finally {
-      setLoadingVacantRooms(false);
-    }
-  };
+    if (!token) return;
 
-  if (!token) return;
-  loadVacantRooms();
-}, [token]);
+    loadVacantRooms();
+    loadVacancyAnnouncements();
+  }, [token]);
+
+  useEffect(() => {
+    if (!vacantRooms.length) {
+      setSelectedVacantRoomId("");
+      return;
+    }
+
+    setSelectedVacantRoomId((prev) => {
+      if (prev && vacantRooms.some((item) => item.id === prev)) {
+        return prev;
+      }
+      return vacantRooms[0].id;
+    });
+  }, [vacantRooms]);
 
   const handleFormChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -621,16 +763,6 @@ export default function MyDorm() {
   ) => {
     const { name, value } = e.target;
     setPhones((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [name]: value } : item))
-    );
-  };
-
-  const handleAnnouncementChange = (
-    index: number,
-    e: ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setAnnouncements((prev) =>
       prev.map((item, i) => (i === index ? { ...item, [name]: value } : item))
     );
   };
@@ -780,7 +912,6 @@ export default function MyDorm() {
         roomTypes: normalizedRoomTypes,
         phones: normalizedPhones,
         images: normalizedImages,
-        announcements,
       });
 
       setMessage(
@@ -1053,14 +1184,14 @@ export default function MyDorm() {
                       )}
                     </div>
                   ))}
-              </div>
+                </div>
 
-  {amenityOptions.length === 0 && (
-    <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">
-      ยังไม่มีรายการสิ่งอำนวยความสะดวก
-    </div>
-  )}
-</div>
+                {amenityOptions.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">
+                    ยังไม่มีรายการสิ่งอำนวยความสะดวก
+                  </div>
+                )}
+              </div>
 
               <div>
                 <div className="mb-4 flex items-center justify-between gap-3">
@@ -1413,64 +1544,66 @@ export default function MyDorm() {
                 </h2>
 
                 <div className="rounded-xl bg-[#fff1f6] px-4 py-2 text-sm font-semibold text-[#ff4f8b]">
-                  ดึงจากห้องที่สถานะเป็น “vacant”
+                  เลือกสร้างประกาศจากห้องที่สถานะเป็น “vacant”
                 </div>
               </div>
 
-              {loadingVacantRooms ? (
-                <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
-                  กำลังโหลดรายการห้องว่าง...
-                </div>
-              ) : vacantRooms.length === 0 ? (
-                <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
-                  ยังไม่มีห้องว่างในระบบ
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    {vacantRooms.map((item, index) => (
-                      <div
-                        key={item.id}
-                        className="rounded-2xl border border-gray-200 bg-[#fcfcfd] p-5"
+              <div className="rounded-2xl border border-dashed border-pink-200 bg-[#fff8fb] p-4 text-sm text-gray-600">
+                ห้องที่เป็น <span className="font-semibold text-[#ff4f8b]">vacant</span>{" "}
+                จะเป็นเพียงห้องที่เลือกมาประกาศได้ และเมื่อสร้างประกาศแล้ว
+                รายการจะถูกบันทึกลงฐานข้อมูลจริง
+              </div>
+
+              <section className="space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">
+                  เลือกห้องที่จะประกาศ
+                </h3>
+
+                {loadingVacantRooms ? (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
+                    กำลังโหลดรายการห้องว่าง...
+                  </div>
+                ) : vacantRooms.length === 0 ? (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
+                    ยังไม่มีห้องว่างในระบบ
+                  </div>
+                ) : (
+                  <>
+                    <div className="max-w-md">
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
+                        เลือกห้อง
+                      </label>
+                      <select
+                        value={selectedVacantRoomId}
+                        onChange={(e) => setSelectedVacantRoomId(e.target.value)}
+                        className="h-12 w-full rounded-2xl border border-gray-200 bg-[#f8f8fb] px-4 text-base font-semibold text-gray-900 outline-none focus:ring-2 focus:ring-pink-300"
                       >
-                        <div className="mb-4 flex items-center justify-between">
+                        {vacantRooms.map((room) => (
+                          <option key={room.id} value={room.id}>
+                            {getVacantRoomOptionLabel(room)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedVacantRoom && (
+                      <div className="rounded-2xl border border-gray-200 bg-[#fcfcfd] p-5">
+                        <div className="mb-4 flex items-center justify-between gap-3">
                           <div className="font-bold text-gray-900">
-                            รายการประกาศ {index + 1}
+                            {getVacantRoomOptionLabel(selectedVacantRoom)}
                           </div>
                           <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                            {getRoomStatusLabel(item.status)}
+                            {getRoomStatusLabel(selectedVacantRoom.status)}
                           </span>
                         </div>
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                           <div>
                             <label className="mb-2 block text-sm font-semibold text-gray-700">
-                              ห้องพัก
-                            </label>
-                            <input
-                              value={item.room_number || ""}
-                              readOnly
-                              className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="mb-2 block text-sm font-semibold text-gray-700">
                               ประเภทห้อง
                             </label>
                             <input
-                              value={item.room_type || ""}
-                              readOnly
-                              className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="mb-2 block text-sm font-semibold text-gray-700">
-                              ชั้น
-                            </label>
-                            <input
-                              value={String(item.floor_no ?? "")}
+                              value={selectedVacantRoom.room_type || ""}
                               readOnly
                               className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
                             />
@@ -1482,9 +1615,22 @@ export default function MyDorm() {
                             </label>
                             <input
                               value={
-                                item.building_display_name ||
-                                (item.building_code ? `อาคาร ${item.building_code}` : "")
+                                selectedVacantRoom.building_display_name ||
+                                (selectedVacantRoom.building_code
+                                  ? `อาคาร ${selectedVacantRoom.building_code}`
+                                  : "")
                               }
+                              readOnly
+                              className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold text-gray-700">
+                              ชั้น
+                            </label>
+                            <input
+                              value={String(selectedVacantRoom.floor_no ?? "")}
                               readOnly
                               className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
                             />
@@ -1496,30 +1642,74 @@ export default function MyDorm() {
                             </label>
                             <input
                               value={
-                                item.size_sqm == null || item.size_sqm === ""
+                                selectedVacantRoom.size_sqm == null ||
+                                selectedVacantRoom.size_sqm === ""
                                   ? "-"
-                                  : String(item.size_sqm)
+                                  : String(selectedVacantRoom.size_sqm)
                               }
                               readOnly
                               className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
                             />
                           </div>
 
-                          <div>
+                          <div className="md:col-span-2">
                             <label className="mb-2 block text-sm font-semibold text-gray-700">
                               ราคา / เดือน
                             </label>
                             <input
-                              value={String(item.monthly_rent ?? 0)}
+                              value={`฿${formatMoney(
+                                String(selectedVacantRoom.monthly_rent ?? 0)
+                              )}`}
                               readOnly
                               className="h-12 w-full rounded-xl border border-gray-200 bg-[#f8f8fb] px-4 outline-none"
                             />
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
 
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCreateAnnouncementFromRoom(selectedVacantRoom)
+                            }
+                            disabled={
+                              announcedRoomIds.has(selectedVacantRoom.id) ||
+                              submittingAnnouncement
+                            }
+                            className="rounded-xl bg-[#ff4f8b] px-5 py-2.5 text-sm font-semibold text-white shadow hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {announcedRoomIds.has(selectedVacantRoom.id)
+                              ? "อยู่ในรายการประกาศแล้ว"
+                              : submittingAnnouncement
+                              ? "กำลังสร้างประกาศ..."
+                              : "สร้างประกาศจากห้องนี้"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    รายการประกาศที่เลือกไว้
+                  </h3>
+                  <div className="text-sm text-gray-500">
+                    ทั้งหมด {announcements.length} รายการ
+                  </div>
+                </div>
+
+                {loadingVacancyAnnouncements ? (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
+                    กำลังโหลดประกาศห้องว่าง...
+                  </div>
+                ) : announcements.length === 0 ? (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
+                    ยังไม่มีรายการประกาศที่บันทึกไว้
+                  </div>
+                ) : (
                   <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-white">
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-sm">
@@ -1529,30 +1719,45 @@ export default function MyDorm() {
                             <th className="px-4 py-4 font-semibold">ประเภทห้อง</th>
                             <th className="px-4 py-4 font-semibold">อาคาร / ชั้น</th>
                             <th className="px-4 py-4 font-semibold">ราคา / เดือน</th>
-                            <th className="px-4 py-4 font-semibold">สถานะ</th>
+                            <th className="px-4 py-4 font-semibold">สถานะประกาศ</th>
+                            <th className="px-4 py-4 font-semibold">จัดการ</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {vacantRooms.map((item) => (
+                          {announcements.map((item) => (
                             <tr key={item.id}>
                               <td className="px-4 py-4 font-semibold text-gray-900">
-                                {item.room_number}
+                                {item.room_no}
                               </td>
                               <td className="px-4 py-4 text-gray-700">
                                 {item.room_type || "-"}
                               </td>
                               <td className="px-4 py-4 text-gray-700">
-                                {item.building_display_name ||
-                                  (item.building_code ? `อาคาร ${item.building_code}` : "-")}{" "}
-                                / ชั้น {item.floor_no ?? "-"}
+                                {item.building || "-"} / ชั้น {item.floor || "-"}
                               </td>
                               <td className="px-4 py-4 text-gray-700">
-                                ฿{formatMoney(String(item.monthly_rent ?? 0))}
+                                ฿{formatMoney(item.price)}
                               </td>
                               <td className="px-4 py-4">
-                                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                                  {getRoomStatusLabel(item.status)}
+                                <span
+                                  className={`rounded-full px-3 py-1 text-xs font-semibold ${getAnnouncementStatusClass(
+                                    item.status
+                                  )}`}
+                                >
+                                  {getAnnouncementStatusLabel(item.status)}
                                 </span>
+                              </td>
+                              <td className="px-4 py-4">
+                                <button
+                                  type="button"
+                                  onClick={() => handleHideAnnouncement(item.id)}
+                                  disabled={removingAnnouncementId === item.id}
+                                  className="rounded-lg bg-[#ef4444] px-3 py-2 text-xs font-semibold text-white hover:opacity-95 disabled:opacity-60"
+                                >
+                                  {removingAnnouncementId === item.id
+                                    ? "กำลังนำออก..."
+                                    : "เอาออกจากรายการ"}
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -1560,8 +1765,8 @@ export default function MyDorm() {
                       </table>
                     </div>
                   </div>
-                </>
-              )}
+                )}
+              </section>
             </div>
           )}
         </div>

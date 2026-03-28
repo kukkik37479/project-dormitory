@@ -1,6 +1,7 @@
 import { supabase } from "../supabase";
 
 const API_URL = "http://localhost:3000/api/my-dorm";
+const ANNOUNCEMENT_API_URL = "http://localhost:3000/api/announcements";
 const SUPABASE_BUCKET = "dorm-images";
 
 function getToken() {
@@ -207,4 +208,77 @@ export async function deleteDormImagesFromSupabase(paths: string[]) {
   if (error) {
     throw new Error(error.message || "ลบรูปจาก Supabase ไม่สำเร็จ");
   }
+}
+
+export async function getVacancyAnnouncements(dormId?: string) {
+  const token = getToken();
+  const query = dormId ? `?dormId=${encodeURIComponent(dormId)}` : "";
+
+  const res = await fetch(`${ANNOUNCEMENT_API_URL}/vacancy${query}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await parseResponse(res);
+
+  if (!res.ok) {
+    throw new Error(data.message || "โหลดประกาศห้องว่างไม่สำเร็จ");
+  }
+
+  return data;
+}
+
+export async function createVacancyAnnouncement(payload: {
+  dorm_id?: string;
+  room_id: string;
+  note?: string | null;
+  status?: "draft" | "published";
+}) {
+  const token = getToken();
+
+  const res = await fetch(`${ANNOUNCEMENT_API_URL}/vacancy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await parseResponse(res);
+
+  if (!res.ok) {
+    throw new Error(data.message || "สร้างประกาศห้องว่างไม่สำเร็จ");
+  }
+
+  return data;
+}
+
+export async function deleteVacancyAnnouncement(
+  vacancyAnnouncementId: string,
+  dormId?: string
+) {
+  const token = getToken();
+  const query = dormId ? `?dormId=${encodeURIComponent(dormId)}` : "";
+
+  const res = await fetch(
+    `${ANNOUNCEMENT_API_URL}/vacancy/${encodeURIComponent(
+      vacancyAnnouncementId
+    )}${query}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  const data = await parseResponse(res);
+
+  if (!res.ok) {
+    throw new Error(data.message || "ลบประกาศห้องว่างไม่สำเร็จ");
+  }
+
+  return data;
 }

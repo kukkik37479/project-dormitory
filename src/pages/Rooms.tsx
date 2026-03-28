@@ -5,6 +5,7 @@ import {
   createRoom,
   getRooms,
   getRoomsMeta,
+  updateRoomStatus,
 } from "../service/rooms.service";
 
 type Room = {
@@ -39,6 +40,19 @@ type RoomTypeOption = {
   price_max?: number | string | null;
 };
 
+function getStatusLabel(status: Room["status"]) {
+  switch (status) {
+    case "vacant":
+      return "ว่าง";
+    case "maintenance":
+      return "ปรับปรุง";
+    case "occupied":
+      return "มีผู้เช่า";
+    default:
+      return status;
+  }
+}
+
 export default function Rooms() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
@@ -46,6 +60,7 @@ export default function Rooms() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [updatingRoomId, setUpdatingRoomId] = useState<string | null>(null);
 
   const [openAddRoom, setOpenAddRoom] = useState(false);
   const [openAddBuilding, setOpenAddBuilding] = useState(false);
@@ -114,6 +129,33 @@ export default function Rooms() {
       return "bg-amber-50 text-amber-700 border border-amber-200";
     return "bg-rose-50 text-rose-700 border border-rose-200";
   };
+
+  async function handleUpdateStatus(
+    room: Room,
+    nextStatus: "vacant" | "maintenance"
+  ) {
+    const nextStatusLabel = getStatusLabel(nextStatus);
+
+    const confirmed = window.confirm(
+      `ต้องการเปลี่ยนสถานะห้อง ${room.room_number} เป็น "${nextStatusLabel}" ใช่หรือไม่?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setUpdatingRoomId(room.id);
+      setError("");
+      await updateRoomStatus(room.id, nextStatus);
+      await loadAll();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "อัปเดตสถานะห้องไม่สำเร็จ";
+      setError(message);
+      window.alert(message);
+    } finally {
+      setUpdatingRoomId(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-rose-50 flex flex-col">
@@ -235,44 +277,84 @@ export default function Rooms() {
               <p className="text-gray-500">ยังไม่มีห้องในตึก/ชั้นที่เลือก</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {filteredRooms.map((room) => (
-                  <div
-                    key={room.id}
-                    className="rounded-2xl bg-white p-4 shadow-sm border border-rose-100"
-                  >
-                    <div className="flex items-start justify-between">
-                      <h2 className="text-lg font-semibold text-rose-700">
-                        {room.building_display_name ||
-                          `ตึก ${room.building_code || "-"}`}{" "}
-                        ห้อง {room.room_number}
-                      </h2>
-                      <span
-                        className={`text-xs rounded-full px-2 py-0.5 ${statusBadgeClass(
-                          room.status
-                        )}`}
-                      >
-                        {room.status}
-                      </span>
-                    </div>
+                {filteredRooms.map((room) => {
+                  const isUpdating = updatingRoomId === room.id;
 
-                    <p className="mt-1 text-sm">ชั้น: {room.floor_no}</p>
-                    <p className="text-sm">
-                      ค่าเช่า/เดือน:{" "}
-                      {Number(room.monthly_rent).toLocaleString()} บาท
-                    </p>
-                    <p className="text-sm">ประเภท: {room.room_type || "-"}</p>
-                    <p className="text-sm">ผู้เช่า: {room.tenant_name || "-"}</p>
+                  return (
+                    <div
+                      key={room.id}
+                      className="rounded-2xl bg-white p-4 shadow-sm border border-rose-100"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <h2 className="text-lg font-semibold text-rose-700">
+                          {room.building_display_name ||
+                            `ตึก ${room.building_code || "-"}`}{" "}
+                          ห้อง {room.room_number}
+                        </h2>
+                        <span
+                          className={`text-xs rounded-full px-2 py-0.5 ${statusBadgeClass(
+                            room.status
+                          )}`}
+                        >
+                          {getStatusLabel(room.status)}
+                        </span>
+                      </div>
 
-                    <div className="mt-3">
-                      <Link
-                        to={`/rooms/${room.id}`}
-                        className="text-sm rounded-lg border px-3 py-1 hover:bg-gray-50"
-                      >
-                        ดูรายละเอียด
-                      </Link>
+                      <p className="mt-1 text-sm">ชั้น: {room.floor_no}</p>
+                      <p className="text-sm">
+                        ค่าเช่า/เดือน:{" "}
+                        {Number(room.monthly_rent).toLocaleString()} บาท
+                      </p>
+                      <p className="text-sm">ประเภท: {room.room_type || "-"}</p>
+                      <p className="text-sm">ผู้เช่า: {room.tenant_name || "-"}</p>
+
+                      {room.note ? (
+                        <p className="mt-1 text-sm text-gray-500">
+                          หมายเหตุ: {room.note}
+                        </p>
+                      ) : null}
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Link
+                          to={`/rooms/${room.id}`}
+                          className="text-sm rounded-lg border px-3 py-1 hover:bg-gray-50"
+                        >
+                          ดูรายละเอียด
+                        </Link>
+
+                        {room.status === "vacant" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateStatus(room, "maintenance")
+                            }
+                            disabled={isUpdating}
+                            className="text-sm rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+                          >
+                            {isUpdating ? "กำลังบันทึก..." : "เปลี่ยนเป็นปรับปรุง"}
+                          </button>
+                        )}
+
+                        {room.status === "maintenance" && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStatus(room, "vacant")}
+                            disabled={isUpdating}
+                            className="text-sm rounded-lg border border-green-200 bg-green-50 px-3 py-1 text-green-700 hover:bg-green-100 disabled:opacity-60"
+                          >
+                            {isUpdating ? "กำลังบันทึก..." : "เปลี่ยนเป็นพร้อมปล่อย"}
+                          </button>
+                        )}
+                      </div>
+
+                      {room.status === "occupied" && (
+                        <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                          ห้องนี้มีผู้เช่าอยู่ สถานะจะไม่เปลี่ยนจากหน้านี้
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
