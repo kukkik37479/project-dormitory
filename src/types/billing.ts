@@ -150,6 +150,7 @@ export type TenantBillingHistoryItem = {
 
 export type TenantCurrentInvoice = {
   invoice_id: string;
+  dorm_id?: string | null;
   billing_month: string;
   due_date: string;
   room_id: string;

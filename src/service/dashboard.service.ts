@@ -24,15 +24,20 @@ export type DashboardOverviewResponse = {
   invoices: {
     totalInvoices: number;
     totalBilledAmount: number;
+
     paidInvoiceCount: number;
     pendingReviewInvoiceCount: number;
-    outstandingInvoiceCount: number;
+    unpaidInvoiceCount: number;
     overdueInvoiceCount: number;
+    outstandingInvoiceCount: number;
     cancelledInvoiceCount: number;
+
     paidInvoiceAmount: number;
     pendingReviewInvoiceAmount: number;
-    outstandingInvoiceAmount: number;
+    unpaidInvoiceAmount: number;
     overdueInvoiceAmount: number;
+    outstandingInvoiceAmount: number;
+
     baseRentTotal: number;
     waterTotal: number;
     electricTotal: number;
@@ -53,6 +58,7 @@ export type DashboardOverviewResponse = {
   };
   alerts: {
     pendingReviewInvoices: number;
+    unpaidInvoices: number;
     overdueInvoices: number;
     submittedPayments: number;
     rejectedPayments: number;
@@ -69,7 +75,13 @@ export type RevenueTrendItem = {
 };
 
 export type PaymentStatusItem = {
-  key: "paid" | "pending_review" | "outstanding" | string;
+  key:
+    | "paid"
+    | "pending_review"
+    | "unpaid"
+    | "overdue"
+    | "outstanding"
+    | string;
   label: string;
   count: number;
   amount: number;
@@ -80,6 +92,19 @@ export type PaymentStatusResponse = {
   month: string;
   totalInvoices: number;
   totalAmount: number;
+
+  paidCount: number;
+  pendingCount: number;
+  unpaidCount: number;
+  overdueCount: number;
+  outstandingCount: number;
+
+  paidAmount: number;
+  pendingAmount: number;
+  unpaidAmount: number;
+  overdueAmount: number;
+  outstandingAmount: number;
+
   items: PaymentStatusItem[];
 };
 
@@ -190,13 +215,19 @@ export type MonthlyRevenueSummaryItem = {
   month: string;
   totalInvoices: number;
   totalBilledAmount: number;
+
   paidInvoiceAmount: number;
   pendingReviewAmount: number;
-  outstandingAmount: number;
+  unpaidAmount: number;
   overdueAmount: number;
+  outstandingAmount: number;
+
   paidInvoiceCount: number;
   pendingReviewCount: number;
+  unpaidCount: number;
+  overdueCount: number;
   outstandingCount: number;
+
   approvedPaymentAmount: number;
   submittedPaymentAmount: number;
   rejectedPaymentAmount: number;
@@ -235,7 +266,10 @@ function buildQuery(params: Record<string, QueryValue>) {
   return query ? `?${query}` : "";
 }
 
-async function request<T>(path: string, params: Record<string, QueryValue> = {}) {
+async function request<T>(
+  path: string,
+  params: Record<string, QueryValue> = {}
+): Promise<T> {
   const token = getToken();
 
   const response = await fetch(`${API_URL}${path}${buildQuery(params)}`, {

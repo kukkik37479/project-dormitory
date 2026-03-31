@@ -100,7 +100,7 @@ function getInvoiceStatusMeta(status: OwnerPaymentInvoiceStatus) {
       };
     case "overdue":
       return {
-        label: "ค้างชำระ",
+        label: "เกินกำหนดชำระ",
         chipClass: "bg-rose-100 text-rose-700",
         rowClass: "bg-rose-100/80",
         cardClass: "border-rose-200 bg-rose-50/80",
@@ -934,7 +934,7 @@ export default function Payments() {
           className="bg-gradient-to-r from-sky-600 to-cyan-500"
         />
         <SummaryCard
-          title="ค้างชำระ"
+          title="เกินกำหนดชำระ"
           amount={summary.overdueAmount}
           count={summary.overdueCount}
           className="bg-gradient-to-r from-red-600 to-red-500"
@@ -981,7 +981,7 @@ export default function Payments() {
               <option value="pending_review">รอตรวจสอบ</option>
               <option value="paid">จ่ายแล้ว</option>
               <option value="unpaid">ยังไม่ชำระ</option>
-              <option value="overdue">ค้างชำระ</option>
+              <option value="overdue">เกินกำหนดชำระ</option>
             </select>
           </div>
 
@@ -1113,7 +1113,7 @@ export default function Payments() {
 
         <div className="mt-6 text-sm leading-6 text-slate-500">
           ถ้ามีสลิปอัปเดตจะเข้ามาอยู่ในสถานะรอตรวจสอบ • สีเขียว = ตรวจสอบแล้ว
-          • สีฟ้า = ยังไม่ชำระ • สีแดง = ค้างชำระ
+          • สีฟ้า = ยังไม่ชำระ • สีแดง = เกินกำหนดชำระ
         </div>
       </section>
 

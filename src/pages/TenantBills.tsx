@@ -20,6 +20,32 @@ type StoredUser = {
   email?: string | null;
 };
 
+type DisplayInvoiceItem = {
+  invoice_id: string;
+  dorm_id?: string | null;
+  billing_month: string;
+  due_date: string;
+  room_number: string;
+  floor_no: number;
+  building_name: string;
+  building_code: string;
+  tenant_name?: string | null;
+  base_rent_amount: number | string;
+  water_amount: number | string;
+  electric_amount: number | string;
+  other_amount: number | string;
+  discount_amount: number | string;
+  total_amount: number | string;
+  invoice_status: BillingInvoiceStatus;
+  latest_payment: TenantBillingHistoryItem["latest_payment"];
+  payment_bank_name?: string | null;
+  payment_account_name?: string | null;
+  payment_account_number?: string | null;
+  payment_promptpay_id?: string | null;
+  payment_qr_image_url?: string | null;
+  source: "current" | "history";
+};
+
 function getStoredUser(): StoredUser | null {
   try {
     const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
@@ -170,92 +196,267 @@ function SummaryRow({
   );
 }
 
-function HistoryCard({ item }: { item: TenantBillingHistoryItem }) {
+function isManageableStatus(status: BillingInvoiceStatus) {
+  return ["unpaid", "overdue", "pending_review", "draft"].includes(status);
+}
+
+function getInvoicePriority(status: BillingInvoiceStatus) {
+  switch (status) {
+    case "overdue":
+      return 1;
+    case "unpaid":
+      return 2;
+    case "pending_review":
+      return 3;
+    case "draft":
+      return 4;
+    case "paid":
+      return 5;
+    case "cancelled":
+    default:
+      return 99;
+  }
+}
+
+function normalizeCurrentInvoice(
+  invoice: TenantCurrentInvoice | null
+): DisplayInvoiceItem | null {
+  if (!invoice) return null;
+
+  return {
+    invoice_id: invoice.invoice_id,
+    dorm_id: invoice.dorm_id,
+    billing_month: invoice.billing_month,
+    due_date: invoice.due_date,
+    room_number: invoice.room_number,
+    floor_no: invoice.floor_no,
+    building_name: invoice.building_name,
+    building_code: invoice.building_code,
+    tenant_name: invoice.tenant_name,
+    base_rent_amount: invoice.base_rent_amount,
+    water_amount: invoice.water_amount,
+    electric_amount: invoice.electric_amount,
+    other_amount: invoice.other_amount,
+    discount_amount: invoice.discount_amount,
+    total_amount: invoice.total_amount,
+    invoice_status: invoice.invoice_status,
+    latest_payment: invoice.latest_payment,
+    payment_bank_name: invoice.payment_bank_name,
+    payment_account_name: invoice.payment_account_name,
+    payment_account_number: invoice.payment_account_number,
+    payment_promptpay_id: invoice.payment_promptpay_id,
+    payment_qr_image_url: invoice.payment_qr_image_url,
+    source: "current",
+  };
+}
+
+function normalizeHistoryInvoice(
+  invoice: TenantBillingHistoryItem,
+  fallbackCurrentInvoice: TenantCurrentInvoice | null
+): DisplayInvoiceItem {
+  return {
+    invoice_id: invoice.invoice_id,
+    dorm_id: fallbackCurrentInvoice?.dorm_id || null,
+    billing_month: invoice.billing_month,
+    due_date: invoice.due_date,
+    room_number: invoice.room_number,
+    floor_no: invoice.floor_no,
+    building_name: invoice.building_name,
+    building_code: invoice.building_code,
+    tenant_name: invoice.tenant_name,
+    base_rent_amount: invoice.base_rent_amount,
+    water_amount: invoice.water_amount,
+    electric_amount: invoice.electric_amount,
+    other_amount: invoice.other_amount,
+    discount_amount: invoice.discount_amount,
+    total_amount: invoice.total_amount,
+    invoice_status: invoice.invoice_status,
+    latest_payment: invoice.latest_payment,
+    payment_bank_name: fallbackCurrentInvoice?.payment_bank_name || null,
+    payment_account_name: fallbackCurrentInvoice?.payment_account_name || null,
+    payment_account_number:
+      fallbackCurrentInvoice?.payment_account_number || null,
+    payment_promptpay_id: fallbackCurrentInvoice?.payment_promptpay_id || null,
+    payment_qr_image_url: fallbackCurrentInvoice?.payment_qr_image_url || null,
+    source: "history",
+  };
+}
+
+function ActiveInvoiceCard({
+  item,
+  selected,
+  onSelect,
+}: {
+  item: DisplayInvoiceItem;
+  selected: boolean;
+  onSelect: (invoiceId: string) => void;
+}) {
   const invoiceMeta = getInvoiceStatusMeta(item.invoice_status);
   const paymentMeta = getPaymentStatusMeta(item.latest_payment?.payment_status);
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+    <div
+      className={`rounded-3xl border p-4 transition ${
+        selected
+          ? "border-rose-300 bg-rose-50 shadow-sm"
+          : "border-slate-200 bg-white"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <div className="text-lg font-bold text-slate-900">
             บิลเดือน {formatMonthThai(item.billing_month)}
           </div>
+          <div className="mt-1 text-sm text-slate-500">
+            ห้อง {item.room_number} • {item.building_name} • ชั้น {item.floor_no}
+          </div>
+        </div>
+
+        <StatusBadge
+          label={invoiceMeta.label}
+          className={invoiceMeta.className}
+        />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="text-slate-500">ครบกำหนด</div>
+          <div className="mt-1 font-semibold">{formatDateThai(item.due_date)}</div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="text-slate-500">ยอดที่ต้องชำระ</div>
+          <div className="mt-1 font-semibold">
+            ฿{formatMoney(item.total_amount)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <StatusBadge
+          label={paymentMeta.label}
+          className={paymentMeta.className}
+        />
+
+        <button
+          type="button"
+          onClick={() => onSelect(item.invoice_id)}
+          className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
+            selected
+              ? "bg-rose-600 text-white"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+          }`}
+        >
+          ดูรายละเอียด
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PaymentHistoryCard({
+  item,
+  expanded,
+  onToggleDetail,
+  onViewSlip,
+}: {
+  item: DisplayInvoiceItem;
+  expanded: boolean;
+  onToggleDetail: (invoiceId: string) => void;
+  onViewSlip: (url: string) => void;
+}) {
+  const invoiceMeta = getInvoiceStatusMeta(item.invoice_status);
+  const paymentMeta = getPaymentStatusMeta(item.latest_payment?.payment_status);
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-lg font-bold text-slate-900">
+              บิลเดือน {formatMonthThai(item.billing_month)}
+            </div>
+            <StatusBadge
+              label={invoiceMeta.label}
+              className={invoiceMeta.className}
+            />
+            <StatusBadge
+              label={paymentMeta.label}
+              className={paymentMeta.className}
+            />
+          </div>
+
           <div className="mt-1 text-sm text-slate-500">
             ห้อง {item.room_number} • {item.building_name}
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-4 text-sm lg:min-w-[360px]">
+          <div>
+            <div className="text-slate-500">ยอดรวม</div>
+            <div className="mt-1 font-semibold">
+              ฿{formatMoney(item.total_amount)}
+            </div>
+          </div>
+          <div>
+            <div className="text-slate-500">ชำระเมื่อ</div>
+            <div className="mt-1 font-semibold">
+              {formatDateThai(item.latest_payment?.paid_at)}
+            </div>
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-2">
-          <StatusBadge
-            label={invoiceMeta.label}
-            className={invoiceMeta.className}
-          />
-          <StatusBadge
-            label={paymentMeta.label}
-            className={paymentMeta.className}
-          />
+          <button
+            type="button"
+            onClick={() => onToggleDetail(item.invoice_id)}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            {expanded ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              item.latest_payment?.slip_image_url &&
+              onViewSlip(item.latest_payment.slip_image_url)
+            }
+            disabled={!item.latest_payment?.slip_image_url}
+            className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            ดูสลิป
+          </button>
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-slate-600 sm:grid-cols-2">
-        <div>
-          ครบกำหนด: <b>{formatDateThai(item.due_date)}</b>
-        </div>
-        <div>
-          ยอดรวม: <b>{formatMoney(item.total_amount)} บาท</b>
-        </div>
-        <div>
-          ค่าเช่า: <b>{formatMoney(item.base_rent_amount)} บาท</b>
-        </div>
-        <div>
-          ค่าน้ำ + ค่าไฟ:{" "}
-          <b>
-            {formatMoney(
-              Number(item.water_amount || 0) + Number(item.electric_amount || 0)
-            )}{" "}
-            บาท
-          </b>
-        </div>
-      </div>
-
-      {item.latest_payment && (
-        <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm">
-          <div className="font-semibold text-slate-800">ข้อมูลการชำระล่าสุด</div>
-          <div className="mt-2 grid gap-2 text-slate-600 sm:grid-cols-2">
-            <div>
-              จำนวนเงิน: <b>{formatMoney(item.latest_payment.submitted_amount)} บาท</b>
+      {expanded ? (
+        <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl bg-white px-4 py-3 text-sm">
+              <div className="text-slate-500">ครบกำหนด</div>
+              <div className="mt-1 font-semibold">{formatDateThai(item.due_date)}</div>
             </div>
-            <div>
-              เวลาชำระ: <b>{formatDateTimeThai(item.latest_payment.paid_at)}</b>
+            <div className="rounded-2xl bg-white px-4 py-3 text-sm">
+              <div className="text-slate-500">เลขอ้างอิง</div>
+              <div className="mt-1 font-semibold">
+                {item.latest_payment?.reference_no || "-"}
+              </div>
             </div>
-            <div>
-              อัปเดตล่าสุด:{" "}
-              <b>{formatDateTimeThai(item.latest_payment.updated_at)}</b>
-            </div>
-            <div>
-              อ้างอิง: <b>{item.latest_payment.reference_no || "-"}</b>
+            <div className="rounded-2xl bg-white px-4 py-3 text-sm">
+              <div className="text-slate-500">อัปโหลดสลิป</div>
+              <div className="mt-1 font-semibold">
+                {formatDateTimeThai(item.latest_payment?.updated_at)}
+              </div>
             </div>
           </div>
 
-          {item.latest_payment.review_note && (
-            <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-700">
-              หมายเหตุ: {item.latest_payment.review_note}
+          {item.latest_payment?.review_note ? (
+            <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              <span className="font-semibold">หมายเหตุ:</span>{" "}
+              {item.latest_payment.review_note}
             </div>
-          )}
-
-          {item.latest_payment.slip_image_url && (
-            <a
-              href={item.latest_payment.slip_image_url}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-flex text-sm font-semibold text-rose-600 hover:text-rose-700"
-            >
-              ดูหลักฐานการโอน
-            </a>
-          )}
+          ) : null}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -273,6 +474,10 @@ export default function TenantBills() {
     null
   );
   const [history, setHistory] = useState<TenantBillingHistoryItem[]>([]);
+
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string>("");
+  const [slipModalUrl, setSlipModalUrl] = useState<string>("");
 
   const [selectedSlipFile, setSelectedSlipFile] = useState<File | null>(null);
   const [slipPreviewUrl, setSlipPreviewUrl] = useState("");
@@ -300,19 +505,6 @@ export default function TenantBills() {
   }, []);
 
   useEffect(() => {
-    if (!currentInvoice) {
-      setSubmittedAmount("");
-      return;
-    }
-
-    setSubmittedAmount(String(Number(currentInvoice.total_amount || 0)));
-    setReferenceNo("");
-    setPaidAt(getNowLocalDateTimeInputValue());
-    setSelectedSlipFile(null);
-    setSlipPreviewUrl("");
-  }, [currentInvoice?.invoice_id]);
-
-  useEffect(() => {
     return () => {
       if (slipPreviewUrl) {
         URL.revokeObjectURL(slipPreviewUrl);
@@ -320,51 +512,127 @@ export default function TenantBills() {
     };
   }, [slipPreviewUrl]);
 
-  const currentInvoiceStatusMeta = currentInvoice
-    ? getInvoiceStatusMeta(currentInvoice.invoice_status)
+  const normalizedCurrent = useMemo(
+    () => normalizeCurrentInvoice(currentInvoice),
+    [currentInvoice]
+  );
+
+  const normalizedHistory = useMemo(
+    () => history.map((item) => normalizeHistoryInvoice(item, currentInvoice)),
+    [history, currentInvoice]
+  );
+
+  const activeInvoices = useMemo(() => {
+    const items = [
+      ...(normalizedCurrent ? [normalizedCurrent] : []),
+      ...normalizedHistory.filter((item) => isManageableStatus(item.invoice_status)),
+    ];
+
+    return items.sort((a, b) => {
+      const statusDiff =
+        getInvoicePriority(a.invoice_status) - getInvoicePriority(b.invoice_status);
+      if (statusDiff !== 0) return statusDiff;
+
+      return (
+        new Date(b.billing_month).getTime() - new Date(a.billing_month).getTime()
+      );
+    });
+  }, [normalizedCurrent, normalizedHistory]);
+
+  const paymentHistoryItems = useMemo(() => {
+    return normalizedHistory.filter(
+      (item) => !isManageableStatus(item.invoice_status)
+    );
+  }, [normalizedHistory]);
+
+  useEffect(() => {
+    if (!activeInvoices.length) {
+      setSelectedInvoiceId("");
+      return;
+    }
+
+    const stillExists = activeInvoices.some(
+      (item) => item.invoice_id === selectedInvoiceId
+    );
+
+    if (!selectedInvoiceId || !stillExists) {
+      setSelectedInvoiceId(activeInvoices[0].invoice_id);
+    }
+  }, [activeInvoices, selectedInvoiceId]);
+
+  const selectedInvoice = useMemo(() => {
+    return (
+      activeInvoices.find((item) => item.invoice_id === selectedInvoiceId) || null
+    );
+  }, [activeInvoices, selectedInvoiceId]);
+
+  useEffect(() => {
+    if (!selectedInvoice) {
+      setSubmittedAmount("");
+      return;
+    }
+
+    setSubmittedAmount(String(Number(selectedInvoice.total_amount || 0)));
+    setReferenceNo("");
+    setPaidAt(getNowLocalDateTimeInputValue());
+    setSelectedSlipFile(null);
+    setSlipPreviewUrl("");
+  }, [selectedInvoice?.invoice_id]);
+
+  const selectedInvoiceStatusMeta = selectedInvoice
+    ? getInvoiceStatusMeta(selectedInvoice.invoice_status)
     : null;
 
-  const latestPaymentStatusMeta = currentInvoice
-    ? getPaymentStatusMeta(currentInvoice.latest_payment?.payment_status)
+  const selectedPaymentStatusMeta = selectedInvoice
+    ? getPaymentStatusMeta(selectedInvoice.latest_payment?.payment_status)
     : null;
 
   const canSubmitPayment = useMemo(() => {
-    if (!currentInvoice) return false;
-    if (!["unpaid", "overdue"].includes(currentInvoice.invoice_status)) return false;
+    if (!selectedInvoice) return false;
+    if (!["unpaid", "overdue"].includes(selectedInvoice.invoice_status)) {
+      return false;
+    }
 
-    const latestStatus = currentInvoice.latest_payment?.payment_status;
+    const latestStatus = selectedInvoice.latest_payment?.payment_status;
     if (latestStatus === "submitted" || latestStatus === "approved") {
       return false;
     }
 
     return true;
-  }, [currentInvoice]);
+  }, [selectedInvoice]);
 
   const utilityAmount = useMemo(() => {
-    if (!currentInvoice) return 0;
+    if (!selectedInvoice) return 0;
     return (
-      Number(currentInvoice.water_amount || 0) +
-      Number(currentInvoice.electric_amount || 0)
+      Number(selectedInvoice.water_amount || 0) +
+      Number(selectedInvoice.electric_amount || 0)
     );
-  }, [currentInvoice]);
+  }, [selectedInvoice]);
 
   const resolvedDormId = useMemo(() => {
+    if (selectedInvoice?.dorm_id) return selectedInvoice.dorm_id;
+    if (currentInvoice?.dorm_id) return currentInvoice.dorm_id;
     if (storedUser?.dorm_id) return storedUser.dorm_id;
-
-    if (
-      currentInvoice &&
-      "dorm_id" in currentInvoice &&
-      typeof (currentInvoice as TenantCurrentInvoice & { dorm_id?: string | null })
-        .dorm_id !== "undefined"
-    ) {
-      return (
-        (currentInvoice as TenantCurrentInvoice & { dorm_id?: string | null })
-          .dorm_id || null
-      );
-    }
-
     return null;
-  }, [storedUser?.dorm_id, currentInvoice]);
+  }, [selectedInvoice?.dorm_id, currentInvoice?.dorm_id, storedUser?.dorm_id]);
+
+  const overdueCount = useMemo(
+    () => activeInvoices.filter((item) => item.invoice_status === "overdue").length,
+    [activeInvoices]
+  );
+
+  const outstandingAmount = useMemo(() => {
+    return activeInvoices
+      .filter((item) => ["unpaid", "overdue"].includes(item.invoice_status))
+      .reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
+  }, [activeInvoices]);
+
+  const pendingCount = useMemo(
+    () =>
+      activeInvoices.filter((item) => item.invoice_status === "pending_review")
+        .length,
+    [activeInvoices]
+  );
 
   function handleSlipChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -385,7 +653,7 @@ export default function TenantBills() {
       setError("");
       setSuccess("");
 
-      if (!currentInvoice) {
+      if (!selectedInvoice) {
         throw new Error("ไม่พบบิลสำหรับชำระเงิน");
       }
 
@@ -410,12 +678,12 @@ export default function TenantBills() {
 
       const uploaded = await uploadPaymentSlipToSupabase(
         resolvedDormId,
-        currentInvoice.invoice_id,
+        selectedInvoice.invoice_id,
         selectedSlipFile
       );
 
       await submitTenantPayment({
-        invoice_id: currentInvoice.invoice_id,
+        invoice_id: selectedInvoice.invoice_id,
         submitted_amount: amount,
         slip_image_url: uploaded.publicUrl,
         reference_no: referenceNo.trim() || undefined,
@@ -438,7 +706,7 @@ export default function TenantBills() {
         <div className="text-sm font-medium text-white/90">บิลและการชำระเงิน</div>
         <h1 className="mt-2 text-3xl font-extrabold">ชำระค่าเช่าห้อง</h1>
         <p className="mt-2 text-sm text-white/90">
-          ดูยอดชำระปัจจุบัน อัปโหลดสลิป และติดตามสถานะการตรวจสอบได้ที่นี่
+          ดูบิลที่ต้องจัดการทั้งหมด อัปโหลดสลิป และติดตามสถานะการตรวจสอบได้ที่นี่
         </p>
       </div>
 
@@ -460,310 +728,401 @@ export default function TenantBills() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-            <section className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="text-lg font-bold text-slate-900">
-                    บิลปัจจุบัน
-                  </div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    {currentInvoice
-                      ? `บิลเดือน ${formatMonthThai(currentInvoice.billing_month)}`
-                      : "ยังไม่มีบิลปัจจุบัน"}
-                  </div>
-                </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-[28px] border border-rose-200 bg-white p-5 shadow-sm ring-1 ring-rose-100">
+              <div className="text-sm text-slate-500">ค้างชำระ</div>
+              <div className="mt-2 text-3xl font-bold text-rose-600">
+                {overdueCount} บิล
+              </div>
+              <div className="mt-1 text-sm text-slate-500">ต้องจัดการก่อน</div>
+            </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {currentInvoiceStatusMeta && (
-                    <StatusBadge
-                      label={currentInvoiceStatusMeta.label}
-                      className={currentInvoiceStatusMeta.className}
-                    />
-                  )}
-                  {latestPaymentStatusMeta && currentInvoice && (
-                    <StatusBadge
-                      label={latestPaymentStatusMeta.label}
-                      className={latestPaymentStatusMeta.className}
-                    />
-                  )}
+            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="text-sm text-slate-500">ยอดค้างรวม</div>
+              <div className="mt-2 text-3xl font-bold text-slate-900">
+                ฿{formatMoney(outstandingAmount)}
+              </div>
+              <div className="mt-1 text-sm text-slate-500">
+                รวมบิลที่ยังไม่ชำระและค้างชำระ
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-amber-200 bg-white p-5 shadow-sm ring-1 ring-amber-100">
+              <div className="text-sm text-slate-500">รอตรวจสอบ</div>
+              <div className="mt-2 text-3xl font-bold text-amber-600">
+                {pendingCount} บิล
+              </div>
+              <div className="mt-1 text-sm text-slate-500">
+                เจ้าของหอยังไม่ยืนยันสลิป
+              </div>
+            </div>
+          </div>
+
+          {activeInvoices.length > 1 && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <span className="font-semibold">แจ้งเตือน:</span> คุณมีบิลที่ต้องจัดการ{" "}
+              {activeInvoices.length} รายการ กรุณาเลือกบิลจากรายการด้านล่าง
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <section className="rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200">
+              <div className="border-b border-slate-100 px-5 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xl font-bold text-slate-900">
+                      บิลที่ต้องจัดการ
+                    </div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      แสดงบิลค้างชำระ ยังไม่ชำระ และรอตรวจสอบ
+                    </div>
+                  </div>
+
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+                    {activeInvoices.length} รายการ
+                  </span>
                 </div>
               </div>
 
-              {!currentInvoice ? (
-                <div className="mt-8 rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center text-sm text-slate-500">
-                  ยังไม่มีบิลสำหรับชำระในขณะนี้
-                </div>
-              ) : (
-                <>
-                  <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="rounded-3xl bg-slate-50 p-4">
-                      <div className="text-sm text-slate-500">ห้อง</div>
-                      <div className="mt-1 text-xl font-bold text-slate-900">
-                        {currentInvoice.room_number}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        {currentInvoice.building_name} • ชั้น {currentInvoice.floor_no}
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl bg-rose-50 p-4">
-                      <div className="text-sm text-rose-500">ยอดที่ต้องชำระ</div>
-                      <div className="mt-1 text-3xl font-extrabold text-rose-600">
-                        {formatMoney(currentInvoice.total_amount)}
-                      </div>
-                      <div className="mt-1 text-sm text-rose-500">บาท</div>
-                    </div>
+              <div className="space-y-4 p-4">
+                {activeInvoices.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center text-sm text-slate-500">
+                    ยังไม่มีบิลที่ต้องจัดการในขณะนี้
                   </div>
-
-                  <div className="mt-6 rounded-3xl border border-slate-200 p-4">
-                    <div className="text-base font-bold text-slate-900">
-                      รายละเอียดค่าใช้จ่าย
-                    </div>
-
-                    <div className="mt-4 space-y-3">
-                      <SummaryRow
-                        label="ค่าเช่าห้อง"
-                        value={`${formatMoney(currentInvoice.base_rent_amount)} บาท`}
-                      />
-                      <SummaryRow
-                        label="ค่าน้ำ"
-                        value={`${formatMoney(currentInvoice.water_amount)} บาท`}
-                      />
-                      <SummaryRow
-                        label="ค่าไฟ"
-                        value={`${formatMoney(currentInvoice.electric_amount)} บาท`}
-                      />
-                      <SummaryRow
-                        label="รวมค่าน้ำ + ค่าไฟ"
-                        value={`${formatMoney(utilityAmount)} บาท`}
-                      />
-                      <SummaryRow
-                        label="ค่าอื่น ๆ"
-                        value={`${formatMoney(currentInvoice.other_amount)} บาท`}
-                      />
-                      <SummaryRow
-                        label="ส่วนลด"
-                        value={`${formatMoney(currentInvoice.discount_amount)} บาท`}
-                      />
-                      <div className="border-t border-slate-200 pt-3">
-                        <SummaryRow
-                          label="ครบกำหนดชำระ"
-                          value={formatDateThai(currentInvoice.due_date)}
-                          valueClassName={
-                            currentInvoice.invoice_status === "overdue"
-                              ? "text-rose-600"
-                              : "text-slate-900"
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {currentInvoice.latest_payment && (
-                    <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-4">
-                      <div className="text-base font-bold text-amber-800">
-                        รายการชำระล่าสุด
-                      </div>
-                      <div className="mt-3 grid gap-2 text-sm text-amber-900 sm:grid-cols-2">
-                        <div>
-                          จำนวนเงิน:{" "}
-                          <b>
-                            {formatMoney(currentInvoice.latest_payment.submitted_amount)}{" "}
-                            บาท
-                          </b>
-                        </div>
-                        <div>
-                          เวลาชำระ:{" "}
-                          <b>{formatDateTimeThai(currentInvoice.latest_payment.paid_at)}</b>
-                        </div>
-                        <div>
-                          สถานะ:{" "}
-                          <b>
-                            {
-                              getPaymentStatusMeta(
-                                currentInvoice.latest_payment.payment_status
-                              ).label
-                            }
-                          </b>
-                        </div>
-                        <div>
-                          อ้างอิง: <b>{currentInvoice.latest_payment.reference_no || "-"}</b>
-                        </div>
-                      </div>
-
-                      {currentInvoice.latest_payment.review_note && (
-                        <div className="mt-3 rounded-2xl border border-amber-300 bg-white/70 px-3 py-2 text-sm text-amber-800">
-                          หมายเหตุจากเจ้าของหอ:{" "}
-                          {currentInvoice.latest_payment.review_note}
-                        </div>
-                      )}
-
-                      {currentInvoice.latest_payment.slip_image_url && (
-                        <a
-                          href={currentInvoice.latest_payment.slip_image_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-3 inline-flex text-sm font-semibold text-rose-600 hover:text-rose-700"
-                        >
-                          ดูหลักฐานการโอนล่าสุด
-                        </a>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
+                ) : (
+                  activeInvoices.map((item) => (
+                    <ActiveInvoiceCard
+                      key={item.invoice_id}
+                      item={item}
+                      selected={item.invoice_id === selectedInvoiceId}
+                      onSelect={setSelectedInvoiceId}
+                    />
+                  ))
+                )}
+              </div>
             </section>
 
-            <aside className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
-              <div className="text-lg font-bold text-slate-900">ชำระเงิน</div>
-              <div className="mt-1 text-sm text-slate-500">
-                อัปโหลดสลิปเพื่อส่งให้เจ้าของหอตรวจสอบ
-              </div>
-
-              {!currentInvoice ? (
-                <div className="mt-6 rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                  ยังไม่มีบิลที่สามารถชำระได้
-                </div>
-              ) : (
-                <>
-                  <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
-                    <div className="border-b border-slate-200 px-4 py-3">
-                      <div className="text-sm font-semibold text-slate-700">
-                        บัญชีรับเงินของหอ
-                      </div>
+            <section className="space-y-6">
+              <div className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-xl font-bold text-slate-900">
+                      รายละเอียดบิลที่เลือก
                     </div>
-
-                    <div className="space-y-3 px-4 py-4 text-sm text-slate-600">
-                      <div>
-                        ธนาคาร: <b>{currentInvoice.payment_bank_name || "-"}</b>
-                      </div>
-                      <div>
-                        ชื่อบัญชี: <b>{currentInvoice.payment_account_name || "-"}</b>
-                      </div>
-                      <div>
-                        เลขบัญชี: <b>{currentInvoice.payment_account_number || "-"}</b>
-                      </div>
-                      <div>
-                        พร้อมเพย์: <b>{currentInvoice.payment_promptpay_id || "-"}</b>
-                      </div>
-
-                      {currentInvoice.payment_qr_image_url ? (
-                        <div className="pt-2">
-                          <div className="mb-2 text-sm font-medium text-slate-700">
-                            QR ชำระเงิน
-                          </div>
-                          <img
-                            src={currentInvoice.payment_qr_image_url}
-                            alt="payment qr"
-                            className="mx-auto h-52 w-52 rounded-2xl border border-slate-200 bg-white object-contain p-3"
-                          />
-                        </div>
-                      ) : (
-                        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-400">
-                          เจ้าของหอยังไม่ได้ตั้งค่า QR รับเงิน
-                        </div>
-                      )}
+                    <div className="mt-1 text-sm text-slate-500">
+                      {selectedInvoice
+                        ? `บิลเดือน ${formatMonthThai(selectedInvoice.billing_month)}`
+                        : "ยังไม่มีบิลที่เลือก"}
                     </div>
                   </div>
 
-                  <div className="mt-6 space-y-4">
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        จำนวนเงินที่โอน
-                      </label>
-                      <input
-                        type="number"
-                        value={submittedAmount}
-                        onChange={(e) => setSubmittedAmount(e.target.value)}
-                        className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
-                        placeholder="กรอกจำนวนเงิน"
-                        disabled={!canSubmitPayment || submitting}
+                  <div className="flex flex-wrap gap-2">
+                    {selectedInvoiceStatusMeta && (
+                      <StatusBadge
+                        label={selectedInvoiceStatusMeta.label}
+                        className={selectedInvoiceStatusMeta.className}
                       />
+                    )}
+                    {selectedPaymentStatusMeta && selectedInvoice && (
+                      <StatusBadge
+                        label={selectedPaymentStatusMeta.label}
+                        className={selectedPaymentStatusMeta.className}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {!selectedInvoice ? (
+                  <div className="mt-8 rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center text-sm text-slate-500">
+                    ยังไม่มีบิลสำหรับแสดงรายละเอียด
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="rounded-3xl bg-slate-50 p-4">
+                        <div className="text-sm text-slate-500">ห้อง</div>
+                        <div className="mt-1 text-xl font-bold text-slate-900">
+                          {selectedInvoice.room_number}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          {selectedInvoice.building_name} • ชั้น {selectedInvoice.floor_no}
+                        </div>
+                      </div>
+
+                      <div className="rounded-3xl bg-rose-50 p-4">
+                        <div className="text-sm text-rose-500">ยอดที่ต้องชำระ</div>
+                        <div className="mt-1 text-3xl font-extrabold text-rose-600">
+                          {formatMoney(selectedInvoice.total_amount)}
+                        </div>
+                        <div className="mt-1 text-sm text-rose-500">บาท</div>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        วันเวลาที่ชำระ
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={paidAt}
-                        onChange={(e) => setPaidAt(e.target.value)}
-                        className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
-                        disabled={!canSubmitPayment || submitting}
-                      />
-                    </div>
+                    <div className="mt-6 rounded-3xl border border-slate-200 p-4">
+                      <div className="text-base font-bold text-slate-900">
+                        รายละเอียดค่าใช้จ่าย
+                      </div>
 
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        เลขอ้างอิง
-                      </label>
-                      <input
-                        type="text"
-                        value={referenceNo}
-                        onChange={(e) => setReferenceNo(e.target.value)}
-                        className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
-                        placeholder="ถ้ามี"
-                        disabled={!canSubmitPayment || submitting}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        หลักฐานการโอน
-                      </label>
-
-                      <label className="flex min-h-[164px] cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center transition hover:border-rose-300 hover:bg-rose-50">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleSlipChange}
-                          disabled={!canSubmitPayment || submitting}
+                      <div className="mt-4 space-y-3">
+                        <SummaryRow
+                          label="ค่าเช่าห้อง"
+                          value={`${formatMoney(selectedInvoice.base_rent_amount)} บาท`}
                         />
-                        {slipPreviewUrl ? (
-                          <img
-                            src={slipPreviewUrl}
-                            alt="slip preview"
-                            className="max-h-44 rounded-2xl object-contain"
+                        <SummaryRow
+                          label="ค่าน้ำ"
+                          value={`${formatMoney(selectedInvoice.water_amount)} บาท`}
+                        />
+                        <SummaryRow
+                          label="ค่าไฟ"
+                          value={`${formatMoney(selectedInvoice.electric_amount)} บาท`}
+                        />
+                        <SummaryRow
+                          label="รวมค่าน้ำ + ค่าไฟ"
+                          value={`${formatMoney(utilityAmount)} บาท`}
+                        />
+                        <SummaryRow
+                          label="ค่าอื่น ๆ"
+                          value={`${formatMoney(selectedInvoice.other_amount)} บาท`}
+                        />
+                        <SummaryRow
+                          label="ส่วนลด"
+                          value={`${formatMoney(selectedInvoice.discount_amount)} บาท`}
+                        />
+                        <div className="border-t border-slate-200 pt-3">
+                          <SummaryRow
+                            label="ครบกำหนดชำระ"
+                            value={formatDateThai(selectedInvoice.due_date)}
+                            valueClassName={
+                              selectedInvoice.invoice_status === "overdue"
+                                ? "text-rose-600"
+                                : "text-slate-900"
+                            }
                           />
-                        ) : (
-                          <>
-                            <div className="text-3xl">⬆</div>
-                            <div className="mt-2 text-sm font-semibold text-slate-700">
-                              อัปโหลดสลิปการโอน
-                            </div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              รองรับไฟล์รูปภาพเท่านั้น
-                            </div>
-                          </>
-                        )}
-                      </label>
+                        </div>
+                      </div>
                     </div>
 
-                    {!canSubmitPayment && currentInvoice && (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                        {currentInvoice.invoice_status === "pending_review"
-                          ? "บิลนี้ส่งสลิปแล้ว กำลังรอเจ้าของหอตรวจสอบ"
-                          : currentInvoice.latest_payment?.payment_status === "approved"
-                          ? "บิลนี้ตรวจสอบการชำระเรียบร้อยแล้ว"
-                          : "บิลนี้ยังไม่สามารถส่งหลักฐานการชำระได้"}
+                    {selectedInvoice.latest_payment && (
+                      <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="text-base font-bold text-amber-800">
+                          รายการชำระล่าสุด
+                        </div>
+                        <div className="mt-3 grid gap-2 text-sm text-amber-900 sm:grid-cols-2">
+                          <div>
+                            จำนวนเงิน:{" "}
+                            <b>
+                              {formatMoney(
+                                selectedInvoice.latest_payment.submitted_amount
+                              )}{" "}
+                              บาท
+                            </b>
+                          </div>
+                          <div>
+                            เวลาชำระ:{" "}
+                            <b>
+                              {formatDateTimeThai(
+                                selectedInvoice.latest_payment.paid_at
+                              )}
+                            </b>
+                          </div>
+                          <div>
+                            สถานะ:{" "}
+                            <b>
+                              {
+                                getPaymentStatusMeta(
+                                  selectedInvoice.latest_payment.payment_status
+                                ).label
+                              }
+                            </b>
+                          </div>
+                          <div>
+                            อ้างอิง:{" "}
+                            <b>
+                              {selectedInvoice.latest_payment.reference_no || "-"}
+                            </b>
+                          </div>
+                        </div>
+
+                        {selectedInvoice.latest_payment.review_note && (
+                          <div className="mt-3 rounded-2xl border border-amber-300 bg-white/70 px-3 py-2 text-sm text-amber-800">
+                            หมายเหตุจากเจ้าของหอ:{" "}
+                            {selectedInvoice.latest_payment.review_note}
+                          </div>
+                        )}
+
+                        {selectedInvoice.latest_payment.slip_image_url && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSlipModalUrl(
+                                selectedInvoice.latest_payment?.slip_image_url || ""
+                              )
+                            }
+                            className="mt-3 inline-flex text-sm font-semibold text-rose-600 hover:text-rose-700"
+                          >
+                            ดูหลักฐานการโอนล่าสุด
+                          </button>
+                        )}
                       </div>
                     )}
+                  </>
+                )}
+              </div>
 
-                    <button
-                      type="button"
-                      onClick={handleSubmitPayment}
-                      disabled={!canSubmitPayment || submitting}
-                      className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-rose-600 px-5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {submitting ? "กำลังส่งหลักฐาน..." : "ยืนยันการชำระเงิน"}
-                    </button>
+              <aside className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
+                <div className="text-lg font-bold text-slate-900">ชำระเงิน</div>
+                <div className="mt-1 text-sm text-slate-500">
+                  อัปโหลดสลิปเพื่อส่งให้เจ้าของหอตรวจสอบ
+                </div>
+
+                {!selectedInvoice ? (
+                  <div className="mt-6 rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                    ยังไม่มีบิลที่สามารถชำระได้
                   </div>
-                </>
-              )}
-            </aside>
+                ) : (
+                  <>
+                    <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
+                      <div className="border-b border-slate-200 px-4 py-3">
+                        <div className="text-sm font-semibold text-slate-700">
+                          บัญชีรับเงินของหอ
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 px-4 py-4 text-sm text-slate-600">
+                        <div>
+                          ธนาคาร: <b>{selectedInvoice.payment_bank_name || "-"}</b>
+                        </div>
+                        <div>
+                          ชื่อบัญชี:{" "}
+                          <b>{selectedInvoice.payment_account_name || "-"}</b>
+                        </div>
+                        <div>
+                          เลขบัญชี:{" "}
+                          <b>{selectedInvoice.payment_account_number || "-"}</b>
+                        </div>
+                        <div>
+                          พร้อมเพย์:{" "}
+                          <b>{selectedInvoice.payment_promptpay_id || "-"}</b>
+                        </div>
+
+                        {selectedInvoice.payment_qr_image_url ? (
+                          <div className="pt-2">
+                            <div className="mb-2 text-sm font-medium text-slate-700">
+                              QR ชำระเงิน
+                            </div>
+                            <img
+                              src={selectedInvoice.payment_qr_image_url}
+                              alt="payment qr"
+                              className="mx-auto h-52 w-52 rounded-2xl border border-slate-200 bg-white object-contain p-3"
+                            />
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-400">
+                            เจ้าของหอยังไม่ได้ตั้งค่า QR รับเงิน
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-6 space-y-4">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          จำนวนเงินที่โอน
+                        </label>
+                        <input
+                          type="number"
+                          value={submittedAmount}
+                          onChange={(e) => setSubmittedAmount(e.target.value)}
+                          className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+                          placeholder="กรอกจำนวนเงิน"
+                          disabled={!canSubmitPayment || submitting}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          วันเวลาที่ชำระ
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={paidAt}
+                          onChange={(e) => setPaidAt(e.target.value)}
+                          className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+                          disabled={!canSubmitPayment || submitting}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          เลขอ้างอิง
+                        </label>
+                        <input
+                          type="text"
+                          value={referenceNo}
+                          onChange={(e) => setReferenceNo(e.target.value)}
+                          className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+                          placeholder="ถ้ามี"
+                          disabled={!canSubmitPayment || submitting}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          หลักฐานการโอน
+                        </label>
+
+                        <label className="flex min-h-[164px] cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center transition hover:border-rose-300 hover:bg-rose-50">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleSlipChange}
+                            disabled={!canSubmitPayment || submitting}
+                          />
+                          {slipPreviewUrl ? (
+                            <img
+                              src={slipPreviewUrl}
+                              alt="slip preview"
+                              className="max-h-44 rounded-2xl object-contain"
+                            />
+                          ) : (
+                            <>
+                              <div className="text-3xl">⬆</div>
+                              <div className="mt-2 text-sm font-semibold text-slate-700">
+                                อัปโหลดสลิปการโอน
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                รองรับไฟล์รูปภาพเท่านั้น
+                              </div>
+                            </>
+                          )}
+                        </label>
+                      </div>
+
+                      {!canSubmitPayment && selectedInvoice && (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                          {selectedInvoice.invoice_status === "pending_review"
+                            ? "บิลนี้ส่งสลิปแล้ว กำลังรอเจ้าของหอตรวจสอบ"
+                            : selectedInvoice.latest_payment?.payment_status ===
+                              "approved"
+                            ? "บิลนี้ตรวจสอบการชำระเรียบร้อยแล้ว"
+                            : "บิลนี้ยังไม่สามารถส่งหลักฐานการชำระได้"}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleSubmitPayment}
+                        disabled={!canSubmitPayment || submitting}
+                        className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-rose-600 px-5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {submitting ? "กำลังส่งหลักฐาน..." : "ส่งหลักฐานการชำระของบิลนี้"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </aside>
+            </section>
           </div>
 
           <section className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
@@ -773,24 +1132,59 @@ export default function TenantBills() {
                   ประวัติการชำระเงิน
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
-                  รายการย้อนหลังทั้งหมดของผู้เช่า
+                  เวอร์ชันย่อ อ่านง่ายขึ้น และกดดูรายละเอียดหรือดูสลิปได้
                 </div>
               </div>
             </div>
 
-            {history.length === 0 ? (
+            {paymentHistoryItems.length === 0 ? (
               <div className="mt-6 rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">
                 ยังไม่มีประวัติการชำระเงิน
               </div>
             ) : (
-              <div className="mt-6 grid grid-cols-1 gap-4">
-                {history.map((item) => (
-                  <HistoryCard key={item.invoice_id} item={item} />
+              <div className="mt-6 space-y-3">
+                {paymentHistoryItems.map((item) => (
+                  <PaymentHistoryCard
+                    key={item.invoice_id}
+                    item={item}
+                    expanded={expandedHistoryId === item.invoice_id}
+                    onToggleDetail={(invoiceId) =>
+                      setExpandedHistoryId((prev) =>
+                        prev === invoiceId ? "" : invoiceId
+                      )
+                    }
+                    onViewSlip={(url) => setSlipModalUrl(url)}
+                  />
                 ))}
               </div>
             )}
           </section>
         </>
+      )}
+
+      {slipModalUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="w-full max-w-3xl rounded-[28px] bg-white p-4 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="text-lg font-bold text-slate-900">หลักฐานการโอน</div>
+              <button
+                type="button"
+                onClick={() => setSlipModalUrl("")}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                ปิด
+              </button>
+            </div>
+
+            <div className="rounded-3xl bg-slate-50 p-4">
+              <img
+                src={slipModalUrl}
+                alt="payment slip"
+                className="mx-auto max-h-[70vh] w-auto rounded-2xl object-contain"
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
