@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
   FiMenu,
@@ -20,6 +20,7 @@ import { getAvatarByRoleAndGender } from "../utils/roleAvatar";
 import logoImg from "../assets/logosi.png";
 
 type AppRole = "owner" | "tenant" | "admin";
+type NotificationKey = "chat" | "payments" | "repairs" | "reviews";
 
 type StoredUser = {
   id?: string;
@@ -36,19 +37,101 @@ type StoredUser = {
   gender?: string | null;
 };
 
+type NotificationSummary = {
+  chat: number;
+  payments: number;
+  repairs: number;
+  reviews: number;
+  total: number;
+};
+
+type MenuItem = {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+  notificationKey?: NotificationKey;
+};
+
+const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(
+  /\/$/,
+  ""
+);
+
+const EMPTY_SUMMARY: NotificationSummary = {
+  chat: 0,
+  payments: 0,
+  repairs: 0,
+  reviews: 0,
+  total: 0,
+};
+
+function getStoredUser(): StoredUser | null {
+  try {
+    const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function getToken() {
+  return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+}
+
+function normalizeCount(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+async function fetchNotificationSummary(): Promise<NotificationSummary> {
+  const token = getToken();
+
+  if (!token) {
+    return EMPTY_SUMMARY;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/api/notifications/summary`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      return EMPTY_SUMMARY;
+    }
+
+    const json = await response.json();
+    const data = json?.data || {};
+
+    const chat = normalizeCount(data.chat);
+    const payments = normalizeCount(data.payments);
+    const repairs = normalizeCount(data.repairs);
+    const reviews = normalizeCount(data.reviews);
+
+    return {
+      chat,
+      payments,
+      repairs,
+      reviews,
+      total: chat + payments + repairs + reviews,
+    };
+  } catch (error) {
+    console.error("fetchNotificationSummary error:", error);
+    return EMPTY_SUMMARY;
+  }
+}
+
 export default function AppLayout() {
   const [open, setOpen] = useState(false);
+  const [notificationSummary, setNotificationSummary] =
+    useState<NotificationSummary>(EMPTY_SUMMARY);
+
   const navigate = useNavigate();
 
-  const storedUser: StoredUser | null = useMemo(() => {
-    try {
-      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  }, []);
-
+  const storedUser: StoredUser | null = useMemo(() => getStoredUser(), []);
   const role: AppRole = storedUser?.role ?? "admin";
 
   const avatarSrc = getAvatarByRoleAndGender({
@@ -69,11 +152,44 @@ export default function AppLayout() {
   const headerTitle =
     role === "owner" || role === "tenant" ? dormName : displayName;
 
+  const loadNotificationSummary = useCallback(async () => {
+    if (role === "admin") {
+      setNotificationSummary(EMPTY_SUMMARY);
+      return;
+    }
+
+    const data = await fetchNotificationSummary();
+    setNotificationSummary(data);
+  }, [role]);
+
+  useEffect(() => {
+    loadNotificationSummary();
+
+    const intervalId = window.setInterval(() => {
+      loadNotificationSummary();
+    }, 20000);
+
+    const handleFocus = () => {
+      loadNotificationSummary();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [loadNotificationSummary]);
+
   return (
     <div className="min-h-screen flex bg-gray-50 font-sans">
       <aside className="hidden md:flex md:w-72 md:flex-col bg-white shadow-sm">
         <Brand title={sidebarTitle} onClose={undefined} />
-        <Nav role={role} onNavigate={() => {}} />
+        <Nav
+          role={role}
+          onNavigate={() => {}}
+          notifications={notificationSummary}
+        />
       </aside>
 
       <div
@@ -94,7 +210,11 @@ export default function AppLayout() {
           }`}
         >
           <Brand title={sidebarTitle} onClose={() => setOpen(false)} />
-          <Nav role={role} onNavigate={() => setOpen(false)} />
+          <Nav
+            role={role}
+            onNavigate={() => setOpen(false)}
+            notifications={notificationSummary}
+          />
         </aside>
       </div>
 
@@ -178,9 +298,11 @@ function Brand({
 function Nav({
   role,
   onNavigate,
+  notifications,
 }: {
   role: AppRole;
   onNavigate: () => void;
+  notifications: NotificationSummary;
 }) {
   const base =
     "flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-xl font-medium text-gray-500 transition hover:bg-pink-50 hover:text-[#e11d48]";
@@ -190,37 +312,76 @@ function Nav({
       ? "flex items-center gap-3 px-4 py-3 mx-2 my-1 rounded-xl bg-[#f43f8c] text-white font-bold shadow-md"
       : base;
 
-  const ownerMenus = [
+  const ownerMenus: MenuItem[] = [
     { to: "/home", label: "หน้าแรก", icon: <FiHome size={22} /> },
-    { to: "/my-dorm", label: "หอของฉัน", icon: <MdOutlineApartment size={22} /> },
+    {
+      to: "/my-dorm",
+      label: "หอของฉัน",
+      icon: <MdOutlineApartment size={22} />,
+    },
     { to: "/rooms", label: "ห้องพัก", icon: <FiBox size={22} /> },
     {
       to: "/announcements-chat",
       label: "ประกาศและช่องแชท",
       icon: <FiMessageCircle size={22} />,
+      notificationKey: "chat",
     },
     { to: "/furniture", label: "เฟอร์นิเจอร์", icon: <FiPackage size={22} /> },
     { to: "/bills", label: "บิล/ใบแจ้งหนี้", icon: <FiFileText size={22} /> },
-    { to: "/payments", label: "การชำระเงิน", icon: <FiCreditCard size={22} /> },
-    { to: "/repairs", label: "แจ้งซ่อม", icon: <FiTool size={22} /> },
+    {
+      to: "/payments",
+      label: "การชำระเงิน",
+      icon: <FiCreditCard size={22} />,
+      notificationKey: "payments",
+    },
+    {
+      to: "/repairs",
+      label: "แจ้งซ่อม",
+      icon: <FiTool size={22} />,
+      notificationKey: "repairs",
+    },
     { to: "/overview", label: "ภาพรวม", icon: <GrOverview size={22} /> },
-    { to: "/tenants", label: "รายชื่อผู้เช่า", icon: <FaHouseUser size={22} /> },
-    { to: "/reviews", label: "รีวิว", icon: <FiStar size={22} /> },
+    {
+      to: "/tenants",
+      label: "รายชื่อผู้เช่า",
+      icon: <FaHouseUser size={22} />,
+    },
+    {
+      to: "/reviews",
+      label: "รีวิว",
+      icon: <FiStar size={22} />,
+      notificationKey: "reviews",
+    },
   ];
 
-  const tenantMenus = [
+  const tenantMenus: MenuItem[] = [
     { to: "/home", label: "หน้าแรก", icon: <FiHome size={22} /> },
-    { to: "/my-room", label: "ห้องของฉัน", icon: <MdOutlineApartment size={22} /> },
+    {
+      to: "/my-room",
+      label: "ห้องของฉัน",
+      icon: <MdOutlineApartment size={22} />,
+    },
     {
       to: "/announcements-chat",
       label: "ประกาศและช่องแชท",
       icon: <FiMessageCircle size={22} />,
+      notificationKey: "chat",
     },
-    { to: "/repairs", label: "แจ้งซ่อม", icon: <FiTool size={22} /> },
-    { to: "/bills", label: "บิล/ใบแจ้งหนี้", icon: <FiFileText size={22} /> },
+    {
+      to: "/repairs",
+      label: "แจ้งซ่อม",
+      icon: <FiTool size={22} />,
+      notificationKey: "repairs",
+    },
+    {
+      to: "/bills",
+      label: "บิล/ใบแจ้งหนี้",
+      icon: <FiFileText size={22} />,
+      notificationKey: "payments",
+    },
   ];
 
-  const adminMenus = [
+  const adminMenus: MenuItem[] = [
     { to: "/home", label: "หน้าแรก", icon: <FiHome size={22} /> },
   ];
 
@@ -237,18 +398,49 @@ function Nav({
         Menu
       </div>
 
-      {menus.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.to === "/home"}
-          className={active}
-          onClick={onNavigate}
-        >
-          {item.icon}
-          {item.label}
-        </NavLink>
-      ))}
+      {menus.map((item) => {
+        const count = item.notificationKey
+          ? notifications[item.notificationKey]
+          : 0;
+
+        return (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === "/home"}
+            className={active}
+            onClick={onNavigate}
+          >
+            {({ isActive }) => (
+              <>
+                <span className="shrink-0">{item.icon}</span>
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                <NotificationBadge count={count} isActive={isActive} />
+              </>
+            )}
+          </NavLink>
+        );
+      })}
     </nav>
+  );
+}
+
+function NotificationBadge({
+  count,
+  isActive,
+}: {
+  count: number;
+  isActive: boolean;
+}) {
+  if (!count || count <= 0) return null;
+
+  return (
+    <span
+      className={`ml-auto inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full px-2 text-xs font-bold ${
+        isActive ? "bg-white text-[#e11d48]" : "bg-[#e11d48] text-white"
+      }`}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
   );
 }
