@@ -27,6 +27,10 @@ const MOBILE_BREAKPOINT = 768;
 const REALTIME_REFRESH_DELAY = 250;
 const CHAT_PANEL_HEIGHT_DESKTOP = "calc(100vh - 250px)";
 const CHAT_PANEL_HEIGHT_MOBILE = "calc(100vh - 210px)";
+const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(
+  /\/$/,
+  ""
+);
 
 function getStoredToken(): string | null {
   const candidateKeys = [
@@ -73,6 +77,31 @@ function getStoredToken(): string | null {
   }
 
   return null;
+}
+
+async function markAnnouncementsSeenRequest(dormId?: string | null) {
+  const token = getStoredToken();
+
+  if (!token) {
+    throw new Error("ไม่พบ token สำหรับอัปเดตการอ่านประกาศ");
+  }
+
+  const response = await fetch(`${API_URL}/api/announcements/mark-seen`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(dormId ? { dorm_id: dormId } : {}),
+  });
+
+  const json = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(json?.message || "อัปเดตสถานะอ่านประกาศไม่สำเร็จ");
+  }
+
+  return json;
 }
 
 function getTokenPayload(): Record<string, unknown> | null {
@@ -170,6 +199,65 @@ type LoadOptions = {
   silent?: boolean;
 };
 
+type NotificationSummary = {
+  chat: number;
+  chat_messages?: number;
+  announcements?: number;
+  payments?: number;
+  repairs?: number;
+  reviews?: number;
+  total?: number;
+};
+
+const EMPTY_NOTIFICATION_SUMMARY: NotificationSummary = {
+  chat: 0,
+  chat_messages: 0,
+  announcements: 0,
+  payments: 0,
+  repairs: 0,
+  reviews: 0,
+  total: 0,
+};
+
+function normalizeCount(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+async function fetchNotificationSummaryRequest() {
+  const token = getStoredToken();
+
+  if (!token) {
+    return EMPTY_NOTIFICATION_SUMMARY;
+  }
+
+  const response = await fetch(`${API_URL}/api/notifications/summary`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const json = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(json?.message || "โหลดข้อมูลแจ้งเตือนไม่สำเร็จ");
+  }
+
+  const data = json?.data || {};
+
+  return {
+    chat: normalizeCount(data.chat),
+    chat_messages: normalizeCount(data.chat_messages),
+    announcements: normalizeCount(data.announcements),
+    payments: normalizeCount(data.payments),
+    repairs: normalizeCount(data.repairs),
+    reviews: normalizeCount(data.reviews),
+    total: normalizeCount(data.total),
+  };
+}
+
 export default function AnnouncementsChat() {
   const [activeTab, setActiveTab] = useState<"announcement" | "chat">("chat");
   const [isMobile, setIsMobile] = useState<boolean>(() => {
@@ -201,6 +289,8 @@ export default function AnnouncementsChat() {
   );
 
   const [error, setError] = useState("");
+  const [notificationSummary, setNotificationSummary] =
+    useState<NotificationSummary>(EMPTY_NOTIFICATION_SUMMARY);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -209,12 +299,14 @@ export default function AnnouncementsChat() {
   const shouldStickToBottomRef = useRef(true);
   const announcementsRefreshTimerRef = useRef<number | null>(null);
   const conversationsRefreshTimerRef = useRef<number | null>(null);
+  const markingAnnouncementsSeenRef = useRef(false);
 
   const currentUserId = useMemo(() => getCurrentUserId(), []);
   const currentUserRole = useMemo(() => getCurrentUserRole(), []);
   const currentDormId = useMemo(() => getCurrentDormId(), []);
 
   const isOwner = currentUserRole === "owner";
+  const isTenant = currentUserRole === "tenant";
   const isChatDetailVisible = !isMobile || mobileChatView === "detail";
   const chatPanelHeight = isMobile
     ? CHAT_PANEL_HEIGHT_MOBILE
@@ -224,6 +316,8 @@ export default function AnnouncementsChat() {
     () => conversations.reduce((sum, item) => sum + item.unread_count, 0),
     [conversations]
   );
+
+  const announcementUnread = normalizeCount(notificationSummary.announcements);
 
   const filteredConversations = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
@@ -300,6 +394,23 @@ export default function AnnouncementsChat() {
     });
   }
 
+  async function loadNotificationSummary(options: LoadOptions = {}) {
+    const { silent = false } = options;
+
+    try {
+      if (!silent) {
+        setError("");
+      }
+
+      const data = await fetchNotificationSummaryRequest();
+      setNotificationSummary(data);
+    } catch (err) {
+      if (!silent) {
+        setError(err instanceof Error ? err.message : "โหลดข้อมูลแจ้งเตือนไม่สำเร็จ");
+      }
+    }
+  }
+
   async function loadConversations(
     keepSelected = true,
     options: LoadOptions = {}
@@ -314,6 +425,7 @@ export default function AnnouncementsChat() {
 
       const data = await getChatConversations();
       setConversations(data);
+      loadNotificationSummary({ silent: true });
 
       if (data.length === 0) {
         setSelectedConversationId(null);
@@ -358,6 +470,7 @@ export default function AnnouncementsChat() {
         await markChatAsRead(conversationId);
         const latestConversations = await getChatConversations();
         setConversations(latestConversations);
+        loadNotificationSummary({ silent: true });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "โหลดข้อความไม่สำเร็จ");
@@ -365,6 +478,22 @@ export default function AnnouncementsChat() {
       if (!silent) {
         setLoadingMessages(false);
       }
+    }
+  }
+
+  async function markAnnouncementsSeen() {
+    if (!isTenant || !currentDormId) return;
+    if (markingAnnouncementsSeenRef.current) return;
+
+    try {
+      markingAnnouncementsSeenRef.current = true;
+      await markAnnouncementsSeenRequest(currentDormId);
+      await loadNotificationSummary({ silent: true });
+      window.dispatchEvent(new CustomEvent("roomie:notifications-refresh"));
+    } catch (err) {
+      console.error("markAnnouncementsSeen error:", err);
+    } finally {
+      markingAnnouncementsSeenRef.current = false;
     }
   }
 
@@ -383,6 +512,8 @@ export default function AnnouncementsChat() {
 
       const data = await getAnnouncements(currentDormId);
       setAnnouncements(data);
+
+      await markAnnouncementsSeen();
     } catch (err) {
       setError(err instanceof Error ? err.message : "โหลดประกาศไม่สำเร็จ");
     } finally {
@@ -429,6 +560,32 @@ export default function AnnouncementsChat() {
 
   useEffect(() => {
     loadConversations(false);
+    loadNotificationSummary({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleNotificationsRefresh = () => {
+      loadNotificationSummary({ silent: true });
+    };
+
+    const handleFocus = () => {
+      loadNotificationSummary({ silent: true });
+    };
+
+    window.addEventListener(
+      "roomie:notifications-refresh",
+      handleNotificationsRefresh as EventListener
+    );
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.removeEventListener(
+        "roomie:notifications-refresh",
+        handleNotificationsRefresh as EventListener
+      );
+      window.removeEventListener("focus", handleFocus);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -438,6 +595,31 @@ export default function AnnouncementsChat() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!currentDormId) return;
+
+    const channel = supabase
+      .channel(`announcements-badge-realtime-${currentDormId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "announcements",
+          filter: `dorm_id=eq.${currentDormId}`,
+        },
+        () => {
+          loadNotificationSummary({ silent: true });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDormId]);
 
   useEffect(() => {
     if (activeTab !== "announcement") return;
@@ -611,6 +793,7 @@ export default function AnnouncementsChat() {
       setAnnouncementDate(new Date().toISOString().slice(0, 10));
       setShowAnnouncementModal(false);
       scheduleAnnouncementsRefresh();
+      loadNotificationSummary({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "สร้างประกาศไม่สำเร็จ");
     } finally {
@@ -628,6 +811,7 @@ export default function AnnouncementsChat() {
       setError("");
       await deleteAnnouncement(announcementId, currentDormId);
       scheduleAnnouncementsRefresh();
+      loadNotificationSummary({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "ลบประกาศไม่สำเร็จ");
     }
@@ -689,6 +873,25 @@ export default function AnnouncementsChat() {
         >
           <FiVolume2 size={16} />
           ประกาศข่าวสาร
+          {announcementUnread > 0 ? (
+            <span
+              style={{
+                minWidth: 22,
+                height: 22,
+                padding: "0 6px",
+                borderRadius: 999,
+                background: "#ea4f8b",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {announcementUnread > 99 ? "99+" : announcementUnread}
+            </span>
+          ) : null}
         </button>
 
         <button

@@ -109,6 +109,18 @@ function getPriorityLabel(value: RepairPriorityValue) {
   }
 }
 
+function getFormFurnitureCategoryName(
+  item?: TenantRepairFormOptions["furniture"][number] | null
+) {
+  return item?.category?.name?.trim() || "ไม่ระบุหมวดหมู่";
+}
+
+function getRepairFurnitureCategoryName(
+  item?: RepairRequestItem["furniture"] | null
+) {
+  return item?.categoryName?.trim() || "";
+}
+
 export default function TenantRepair() {
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -126,8 +138,8 @@ export default function TenantRepair() {
   const [selectedRepair, setSelectedRepair] = useState<RepairRequestItem | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [category, setCategory] = useState<RepairCategoryValue>("furniture");
   const [priority, setPriority] = useState<RepairPriorityValue>("medium");
+  const [selectedFurnitureCategory, setSelectedFurnitureCategory] = useState("");
   const [furnitureItemId, setFurnitureItemId] = useState("");
   const [description, setDescription] = useState("");
   const [beforeFiles, setBeforeFiles] = useState<File[]>([]);
@@ -140,6 +152,31 @@ export default function TenantRepair() {
     }
     return getStatusColor(selectedRepair.status);
   }, [selectedRepair]);
+
+  const furnitureCategoryOptions = useMemo(() => {
+    const items = formOptions?.furniture || [];
+    const seen = new Set<string>();
+    const categories: string[] = [];
+
+    items.forEach((item) => {
+      const categoryName = getFormFurnitureCategoryName(item);
+      if (!seen.has(categoryName)) {
+        seen.add(categoryName);
+        categories.push(categoryName);
+      }
+    });
+
+    return categories;
+  }, [formOptions]);
+
+  const filteredFurnitureOptions = useMemo(() => {
+    const items = formOptions?.furniture || [];
+    if (!selectedFurnitureCategory) return items;
+
+    return items.filter(
+      (item) => getFormFurnitureCategoryName(item) === selectedFurnitureCategory
+    );
+  }, [formOptions, selectedFurnitureCategory]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -178,16 +215,23 @@ export default function TenantRepair() {
       setFormOptions(options);
       setRepairList(repairs.data || []);
 
-      if ((options.categories || []).length > 0) {
-        setCategory(options.categories[0].value);
-      }
-
       if ((options.priorities || []).length > 0) {
         setPriority(options.priorities[1]?.value || options.priorities[0].value);
       }
 
-      if ((options.furniture || []).length > 0) {
-        setFurnitureItemId(options.furniture[0].id);
+      const firstFurniture = (options.furniture || [])[0];
+      if (firstFurniture) {
+        const firstCategory = getFormFurnitureCategoryName(firstFurniture);
+        setSelectedFurnitureCategory(firstCategory);
+
+        const firstMatchedFurniture = (options.furniture || []).find(
+          (item) => getFormFurnitureCategoryName(item) === firstCategory
+        );
+
+        setFurnitureItemId(firstMatchedFurniture?.id || firstFurniture.id);
+      } else {
+        setSelectedFurnitureCategory("");
+        setFurnitureItemId("");
       }
 
       if ((repairs.data || []).length > 0) {
@@ -225,6 +269,36 @@ export default function TenantRepair() {
     loadRepairDetail(selectedRepairId);
   }, [selectedRepairId]);
 
+  useEffect(() => {
+    const items = formOptions?.furniture || [];
+
+    if (items.length === 0) {
+      if (furnitureItemId !== "") setFurnitureItemId("");
+      return;
+    }
+
+    if (!selectedFurnitureCategory) {
+      const firstCategory = getFormFurnitureCategoryName(items[0]);
+      setSelectedFurnitureCategory(firstCategory);
+      return;
+    }
+
+    const matchedItems = items.filter(
+      (item) => getFormFurnitureCategoryName(item) === selectedFurnitureCategory
+    );
+
+    if (matchedItems.length === 0) {
+      if (furnitureItemId !== "") setFurnitureItemId("");
+      return;
+    }
+
+    const hasSelectedFurniture = matchedItems.some((item) => item.id === furnitureItemId);
+
+    if (!hasSelectedFurniture) {
+      setFurnitureItemId(matchedItems[0].id);
+    }
+  }, [formOptions, selectedFurnitureCategory, furnitureItemId]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -240,7 +314,7 @@ export default function TenantRepair() {
       const beforeImageUrls = await uploadRepairImages(beforeFiles, "before");
 
       const created = await createRepairRequest({
-        category,
+        category: "furniture",
         priority,
         description: description.trim(),
         furniture_item_id: furnitureItemId || null,
@@ -395,8 +469,9 @@ export default function TenantRepair() {
                   </label>
                   <select
                     id="repair-category"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as RepairCategoryValue)}
+                    value={selectedFurnitureCategory}
+                    onChange={(e) => setSelectedFurnitureCategory(e.target.value)}
+                    disabled={furnitureCategoryOptions.length === 0}
                     style={{
                       width: "100%",
                       height: 48,
@@ -408,11 +483,15 @@ export default function TenantRepair() {
                       background: "#FFFFFF",
                     }}
                   >
-                    {(formOptions?.categories || []).map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
+                    {furnitureCategoryOptions.length === 0 ? (
+                      <option value="">ยังไม่มีหมวดหมู่เฟอร์นิเจอร์</option>
+                    ) : (
+                      furnitureCategoryOptions.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -457,6 +536,7 @@ export default function TenantRepair() {
                     id="repair-furniture"
                     value={furnitureItemId}
                     onChange={(e) => setFurnitureItemId(e.target.value)}
+                    disabled={filteredFurnitureOptions.length === 0}
                     style={{
                       width: "100%",
                       height: 48,
@@ -468,13 +548,15 @@ export default function TenantRepair() {
                       background: "#FFFFFF",
                     }}
                   >
-                    <option value="">ไม่ระบุ</option>
-                    {(formOptions?.furniture || []).map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.itemName}
-                        {item.category?.name ? ` (${item.category.name})` : ""}
-                      </option>
-                    ))}
+                    {filteredFurnitureOptions.length === 0 ? (
+                      <option value="">ยังไม่มีรายการเฟอร์นิเจอร์ในหมวดนี้</option>
+                    ) : (
+                      filteredFurnitureOptions.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.itemName}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -489,7 +571,7 @@ export default function TenantRepair() {
                     id="repair-description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="เช่น แอร์มีน้ำหยด ตู้เสื้อผ้าบานพับหลวม ก๊อกน้ำรั่ว"
+                    placeholder="เช่น ตู้บานพับหลวม เตียงโยก โต๊ะขาหัก"
                     rows={isMobile ? 4 : 5}
                     style={{
                       width: "100%",
@@ -635,6 +717,18 @@ export default function TenantRepair() {
                           }}
                         >
                           {selectedRepair.furniture?.itemName || "-"}
+                        </div>
+                        <div
+                          style={{
+                            color: "#6B7280",
+                            marginTop: 4,
+                            fontSize: 14,
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          หมวดหมู่:{" "}
+                          {getRepairFurnitureCategoryName(selectedRepair.furniture) ||
+                            getCategoryLabel(selectedRepair.category)}
                         </div>
                       </div>
                       <div>
@@ -878,7 +972,9 @@ export default function TenantRepair() {
                           >
                             <span>{formatThaiDate(item.requestedAt)}</span>
                             <span>
-                              {getCategoryLabel(item.category)} · {getPriorityLabel(item.priority)}
+                              {getRepairFurnitureCategoryName(item.furniture) ||
+                                getCategoryLabel(item.category)}{" "}
+                              · {getPriorityLabel(item.priority)}
                             </span>
                           </div>
                         </button>

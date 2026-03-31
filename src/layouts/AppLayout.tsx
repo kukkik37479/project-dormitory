@@ -39,6 +39,8 @@ type StoredUser = {
 
 type NotificationSummary = {
   chat: number;
+  chat_messages?: number;
+  announcements?: number;
   payments: number;
   repairs: number;
   reviews: number;
@@ -59,6 +61,8 @@ const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3000").replac
 
 const EMPTY_SUMMARY: NotificationSummary = {
   chat: 0,
+  chat_messages: 0,
+  announcements: 0,
   payments: 0,
   repairs: 0,
   reviews: 0,
@@ -107,12 +111,16 @@ async function fetchNotificationSummary(): Promise<NotificationSummary> {
     const data = json?.data || {};
 
     const chat = normalizeCount(data.chat);
+    const chatMessages = normalizeCount(data.chat_messages);
+    const announcements = normalizeCount(data.announcements);
     const payments = normalizeCount(data.payments);
     const repairs = normalizeCount(data.repairs);
     const reviews = normalizeCount(data.reviews);
 
     return {
       chat,
+      chat_messages: chatMessages,
+      announcements,
       payments,
       repairs,
       reviews,
@@ -173,11 +181,23 @@ export default function AppLayout() {
       loadNotificationSummary();
     };
 
+    const handleNotificationsRefresh = () => {
+      loadNotificationSummary();
+    };
+
     window.addEventListener("focus", handleFocus);
+    window.addEventListener(
+      "roomie:notifications-refresh",
+      handleNotificationsRefresh as EventListener
+    );
 
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener(
+        "roomie:notifications-refresh",
+        handleNotificationsRefresh as EventListener
+      );
     };
   }, [loadNotificationSummary]);
 

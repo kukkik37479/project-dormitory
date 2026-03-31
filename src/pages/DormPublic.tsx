@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import L from "leaflet";
+import {
+  MapContainer,
+  Marker,
+  TileLayer,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import {
   getPublicDormDetail,
   type PublicDormAmenity,
@@ -32,6 +42,16 @@ type MyDormReviewData = {
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "http://localhost:3000";
+
+const defaultMarkerIcon = L.icon({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
 
 function getAuthToken() {
   return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
@@ -69,6 +89,14 @@ function formatDate(value?: string) {
   }).format(date);
 }
 
+function formatCoordinate(value?: number | null) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "-";
+  }
+
+  return Number(value).toFixed(6);
+}
+
 function buildAddress(dorm: PublicDormDetail) {
   return (
     dorm.full_address ||
@@ -89,6 +117,7 @@ function buildAddress(dorm: PublicDormDetail) {
 function getDisplayImages(dorm: PublicDormDetail | null): PublicDormImage[] {
   if (!dorm) return [];
   if (dorm.images && dorm.images.length > 0) return dorm.images;
+
   if (dorm.cover_image) {
     return [
       {
@@ -101,6 +130,7 @@ function getDisplayImages(dorm: PublicDormDetail | null): PublicDormImage[] {
       },
     ];
   }
+
   return [];
 }
 
@@ -119,6 +149,69 @@ function getRoomDetailPath(roomId: string) {
   return `/public/rooms/${roomId}`;
 }
 
+function hasValidCoordinates(
+  latitude?: number | null,
+  longitude?: number | null
+) {
+  return (
+    typeof latitude === "number" &&
+    typeof longitude === "number" &&
+    !Number.isNaN(latitude) &&
+    !Number.isNaN(longitude)
+  );
+}
+
+function buildGoogleMapUrl(dorm: PublicDormDetail) {
+  if (dorm.google_map_url) return dorm.google_map_url;
+
+  if (hasValidCoordinates(dorm.latitude, dorm.longitude)) {
+    return `https://www.google.com/maps?q=${dorm.latitude},${dorm.longitude}`;
+  }
+
+  return "";
+}
+
+function ReadonlyMap({
+  latitude,
+  longitude,
+  dormName,
+}: {
+  latitude: number;
+  longitude: number;
+  dormName: string;
+}) {
+  return (
+    <div className="relative mt-5 overflow-hidden rounded-2xl border border-rose-100">
+      <MapContainer
+        key={`${latitude}-${longitude}`}
+        center={[latitude, longitude]}
+        zoom={16}
+        dragging={false}
+        touchZoom={false}
+        doubleClickZoom={false}
+        scrollWheelZoom={false}
+        boxZoom={false}
+        keyboard={false}
+        zoomControl={false}
+        attributionControl={true}
+        className="h-[320px] w-full"
+      >
+        <TileLayer
+          attribution="&copy; OpenStreetMap contributors"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <Marker position={[latitude, longitude]} icon={defaultMarkerIcon} />
+      </MapContainer>
+
+      <div className="absolute inset-0 z-[400] cursor-default bg-transparent" />
+
+      <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-gray-600 shadow-sm">
+        แผนที่ตัวอย่างของ {dormName}
+      </div>
+    </div>
+  );
+}
+
 export default function DormPublic() {
   const { dormId } = useParams();
   const location = useLocation();
@@ -135,7 +228,9 @@ export default function DormPublic() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const [myReviewLoading, setMyReviewLoading] = useState(false);
-  const [myReviewData, setMyReviewData] = useState<MyDormReviewData | null>(null);
+  const [myReviewData, setMyReviewData] = useState<MyDormReviewData | null>(
+    null
+  );
   const [rating, setRating] = useState("5");
   const [comment, setComment] = useState("");
   const [reviewError, setReviewError] = useState("");
@@ -296,6 +391,9 @@ export default function DormPublic() {
     );
   }
 
+  const hasCoordinates = hasValidCoordinates(dorm.latitude, dorm.longitude);
+  const mapLink = buildGoogleMapUrl(dorm);
+
   return (
     <div className="min-h-full bg-[#fff7fa]">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -353,11 +451,12 @@ export default function DormPublic() {
               <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
                 หอพักเปิดให้เข้าชม
               </span>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700 border border-rose-100">
+              <span className="rounded-full border border-rose-100 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
                 ห้องทั้งหมด {dorm.total_rooms} ห้อง
               </span>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700 border border-rose-100">
-                ห้องว่าง {Array.isArray(dorm.vacant_rooms) ? dorm.vacant_rooms.length : 0} ห้อง
+              <span className="rounded-full border border-rose-100 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+                ห้องว่าง{" "}
+                {Array.isArray(dorm.vacant_rooms) ? dorm.vacant_rooms.length : 0} ห้อง
               </span>
             </div>
 
@@ -395,18 +494,73 @@ export default function DormPublic() {
 
             {dorm.description ? (
               <div className="mt-5">
-                <h2 className="text-lg font-semibold text-gray-900">รายละเอียดหอพัก</h2>
-                <p className="mt-2 text-sm leading-7 text-gray-600">{dorm.description}</p>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  รายละเอียดหอพัก
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-gray-600">
+                  {dorm.description}
+                </p>
               </div>
             ) : null}
           </section>
         </div>
 
+        {(hasCoordinates || mapLink) && (
+          <section className="mt-6 rounded-3xl border border-rose-100 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">ตำแหน่งที่ตั้ง</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  ดูตำแหน่งของหอพักบนแผนที่
+                </p>
+              </div>
+
+              {mapLink ? (
+                <a
+                  href={mapLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+                >
+                  เปิดใน Google Maps
+                </a>
+              ) : null}
+            </div>
+
+            <p className="text-sm leading-6 text-gray-600">{addressText}</p>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <InfoCard
+                label="Latitude"
+                value={formatCoordinate(dorm.latitude)}
+              />
+              <InfoCard
+                label="Longitude"
+                value={formatCoordinate(dorm.longitude)}
+              />
+            </div>
+
+            {hasCoordinates ? (
+              <ReadonlyMap
+                latitude={Number(dorm.latitude)}
+                longitude={Number(dorm.longitude)}
+                dormName={dorm.name}
+              />
+            ) : (
+              <div className="mt-5 rounded-2xl border border-dashed border-rose-200 bg-[#fffafb] p-5 text-sm text-gray-500">
+                มีลิงก์แผนที่ แต่ยังไม่มีพิกัด latitude / longitude สำหรับแสดงแผนที่ในหน้า
+              </div>
+            )}
+          </section>
+        )}
+
         <section className="mt-6 rounded-3xl border border-rose-100 bg-white p-5 shadow-sm sm:p-6">
           <h2 className="text-2xl font-bold text-gray-900">สิ่งอำนวยความสะดวก</h2>
 
           {dorm.amenities?.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-500">ยังไม่มีข้อมูลสิ่งอำนวยความสะดวก</p>
+            <p className="mt-3 text-sm text-gray-500">
+              ยังไม่มีข้อมูลสิ่งอำนวยความสะดวก
+            </p>
           ) : (
             <div className="mt-4 flex flex-wrap gap-3">
               {dorm.amenities.map((amenity: PublicDormAmenity) => (
@@ -448,13 +602,13 @@ export default function DormPublic() {
                       </p>
                     </div>
 
-                    <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-rose-600 border border-rose-100">
+                    <div className="rounded-full border border-rose-100 bg-white px-3 py-1 text-xs font-semibold text-rose-600">
                       {formatPrice(roomType.price_min)} - {formatPrice(roomType.price_max)} บาท
                     </div>
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2 text-sm text-gray-600">
-                    <span className="rounded-full bg-white px-3 py-1 border border-rose-100">
+                    <span className="rounded-full border border-rose-100 bg-white px-3 py-1">
                       ขนาด {formatSize(roomType.size_sqm)} ตร.ม.
                     </span>
                   </div>
@@ -545,7 +699,9 @@ export default function DormPublic() {
               </h3>
 
               {myReviewLoading ? (
-                <p className="mt-3 text-sm text-gray-500">กำลังตรวจสอบสิทธิ์รีวิว...</p>
+                <p className="mt-3 text-sm text-gray-500">
+                  กำลังตรวจสอบสิทธิ์รีวิว...
+                </p>
               ) : myReviewData?.canReview ? (
                 <form onSubmit={onSubmitReview} className="mt-4 space-y-4">
                   <div>
@@ -686,7 +842,7 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-rose-100 bg-[#fffafb] p-4">
       <div className="text-sm text-gray-500">{label}</div>
-      <div className="mt-1 text-sm font-semibold text-gray-900 break-words">
+      <div className="mt-1 break-words text-sm font-semibold text-gray-900">
         {value}
       </div>
     </div>
