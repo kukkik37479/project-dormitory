@@ -25,6 +25,8 @@ import {
 
 const MOBILE_BREAKPOINT = 768;
 const REALTIME_REFRESH_DELAY = 250;
+const CHAT_PANEL_HEIGHT_DESKTOP = "calc(100vh - 250px)";
+const CHAT_PANEL_HEIGHT_MOBILE = "calc(100vh - 210px)";
 
 function getStoredToken(): string | null {
   const candidateKeys = [
@@ -214,6 +216,9 @@ export default function AnnouncementsChat() {
 
   const isOwner = currentUserRole === "owner";
   const isChatDetailVisible = !isMobile || mobileChatView === "detail";
+  const chatPanelHeight = isMobile
+    ? CHAT_PANEL_HEIGHT_MOBILE
+    : CHAT_PANEL_HEIGHT_DESKTOP;
 
   const totalUnread = useMemo(
     () => conversations.reduce((sum, item) => sum + item.unread_count, 0),
@@ -639,7 +644,7 @@ export default function AnnouncementsChat() {
   return (
     <div
       style={{
-        padding: isMobile ? "20px 16px 24px" : "28px 28px 24px",
+        padding: isMobile ? "20px 16px 12px" : "28px 28px 12px",
         width: "100%",
         boxSizing: "border-box",
         overflowX: "hidden",
@@ -1063,7 +1068,8 @@ export default function AnnouncementsChat() {
           style={{
             display: !isMobile ? "grid" : "block",
             gridTemplateColumns: !isMobile ? "360px minmax(0, 1fr)" : undefined,
-            minHeight: isMobile ? 560 : 640,
+            height: chatPanelHeight,
+            minHeight: 0,
             background: "#fff",
             borderRadius: isMobile ? 20 : 28,
             border: "1px solid #ececec",
@@ -1079,6 +1085,8 @@ export default function AnnouncementsChat() {
                 flexDirection: "column",
                 background: "#fff",
                 minWidth: 0,
+                minHeight: 0,
+                height: "100%",
               }}
             >
               <div
@@ -1158,9 +1166,10 @@ export default function AnnouncementsChat() {
               <div
                 style={{
                   flex: 1,
+                  minHeight: 0,
                   overflowY: "auto",
+                  overscrollBehavior: "contain",
                   background: "#fff",
-                  maxHeight: isMobile ? 520 : "none",
                 }}
               >
                 {!loadingConversations && filteredConversations.length === 0 ? (
@@ -1292,7 +1301,8 @@ export default function AnnouncementsChat() {
                 flexDirection: "column",
                 background: "#fff",
                 minWidth: 0,
-                minHeight: isMobile ? 560 : 0,
+                minHeight: 0,
+                height: "100%",
               }}
             >
               <div
@@ -1369,10 +1379,11 @@ export default function AnnouncementsChat() {
                 }}
                 style={{
                   flex: 1,
+                  minHeight: 0,
                   overflowY: "auto",
+                  overscrollBehavior: "contain",
                   padding: isMobile ? "14px 12px" : "20px 18px",
                   background: "#fbfbfb",
-                  minHeight: 260,
                 }}
               >
                 {loadingMessages ? (

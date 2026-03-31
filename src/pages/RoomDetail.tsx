@@ -59,25 +59,42 @@ function getFileExtension(fileName?: string | null, fileUrl?: string | null) {
   return source.slice(dotIndex + 1).toUpperCase();
 }
 
-const API_BASE_URL = "http://localhost:3000";
+const API_BASE_URL =
+  (import.meta as any)?.env?.VITE_API_BASE_URL || "http://localhost:3000";
 
-function getContractHref(
-  fileUrl?: string | null,
-  filePath?: string | null
-) {
-  const raw = (fileUrl || filePath || "").trim();
+function getContractHref(fileUrl?: string | null, filePath?: string | null) {
+  const rawUrl = (fileUrl || "").trim();
+  const rawPath = (filePath || "").trim();
 
-  if (!raw) return "";
+  if (rawUrl) {
+    if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+      return rawUrl;
+    }
 
-  if (raw.startsWith("http://") || raw.startsWith("https://")) {
-    return raw;
+    if (rawUrl.startsWith("/uploads/")) {
+      return `${API_BASE_URL}${rawUrl}`;
+    }
+
+    if (rawUrl.startsWith("uploads/")) {
+      return `${API_BASE_URL}/${rawUrl}`;
+    }
   }
 
-  if (raw.startsWith("/")) {
-    return `${API_BASE_URL}${raw}`;
+  if (rawPath) {
+    if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
+      return rawPath;
+    }
+
+    if (rawPath.startsWith("/uploads/")) {
+      return `${API_BASE_URL}${rawPath}`;
+    }
+
+    if (rawPath.startsWith("uploads/")) {
+      return `${API_BASE_URL}/${rawPath}`;
+    }
   }
 
-  return `${API_BASE_URL}/${raw}`;
+  return "";
 }
 
 export default function RoomDetail() {
@@ -125,9 +142,9 @@ export default function RoomDetail() {
   const room = data.room;
 
   const contractHref = getContractHref(
-  data?.latest_contract?.contract_file_url,
-  data?.latest_contract?.contract_file_path
-);  
+    data?.latest_contract?.contract_file_url,
+    data?.latest_contract?.contract_file_path
+  );
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -201,7 +218,7 @@ export default function RoomDetail() {
                   </div>
                 </a>
               ) : (
-                <div className="text-gray-500">ยังไม่มีไฟล์สัญญาเช่า</div>
+                <div className="text-gray-500">ยังไม่มีลิงก์ไฟล์สัญญาเช่าที่เปิดได้</div>
               )}
             </div>
           </div>

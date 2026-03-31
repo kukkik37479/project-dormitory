@@ -21,6 +21,7 @@ type TenantItem = {
   contract_status: string | null;
   contract_file_path: string | null;
   contract_file_name: string | null;
+  contract_file_url: string | null;
 };
 
 type TenantListResponse = {
@@ -73,12 +74,39 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   return data as T;
 }
 
-function toAbsoluteFileUrl(filePath?: string | null) {
-  if (!filePath) return null;
-  if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
-    return filePath;
+function resolveContractUrl(fileUrl?: string | null, filePath?: string | null) {
+  const rawUrl = (fileUrl || "").trim();
+  const rawPath = (filePath || "").trim();
+
+  if (rawUrl) {
+    if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+      return rawUrl;
+    }
+
+    if (rawUrl.startsWith("/uploads/")) {
+      return `${API_BASE_URL}${rawUrl}`;
+    }
+
+    if (rawUrl.startsWith("uploads/")) {
+      return `${API_BASE_URL}/${rawUrl}`;
+    }
   }
-  return `${API_BASE_URL}/${filePath.replace(/^\/+/, "")}`;
+
+  if (rawPath) {
+    if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
+      return rawPath;
+    }
+
+    if (rawPath.startsWith("/uploads/")) {
+      return `${API_BASE_URL}${rawPath}`;
+    }
+
+    if (rawPath.startsWith("uploads/")) {
+      return `${API_BASE_URL}/${rawPath}`;
+    }
+  }
+
+  return null;
 }
 
 function TrashIcon() {
@@ -282,7 +310,10 @@ export default function Tenants() {
                   </thead>
                   <tbody>
                     {tenants.map((tenant, index) => {
-                      const fileUrl = toAbsoluteFileUrl(tenant.contract_file_path);
+                      const fileUrl = resolveContractUrl(
+                        tenant.contract_file_url,
+                        tenant.contract_file_path
+                      );
                       const roomLabel = formatRoomLabel(tenant);
 
                       return (
@@ -323,7 +354,7 @@ export default function Tenants() {
                                   : "อัปไฟล์"}
                                 <input
                                   type="file"
-                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  accept=".pdf"
                                   className="hidden"
                                   onChange={(e) => {
                                     const file = e.target.files?.[0] || null;
@@ -359,7 +390,10 @@ export default function Tenants() {
 
               <div className="space-y-3 md:hidden">
                 {tenants.map((tenant, index) => {
-                  const fileUrl = toAbsoluteFileUrl(tenant.contract_file_path);
+                  const fileUrl = resolveContractUrl(
+                    tenant.contract_file_url,
+                    tenant.contract_file_path
+                  );
                   const roomLabel = formatRoomLabel(tenant);
 
                   return (
@@ -411,7 +445,7 @@ export default function Tenants() {
                           {uploadingContractId === tenant.contract_id ? "กำลังอัป..." : "อัปไฟล์"}
                           <input
                             type="file"
-                            accept=".pdf,.jpg,.jpeg,.png"
+                            accept=".pdf"
                             className="hidden"
                             onChange={(e) => {
                               const file = e.target.files?.[0] || null;
