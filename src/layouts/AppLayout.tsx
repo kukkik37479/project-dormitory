@@ -139,7 +139,10 @@ export default function AppLayout() {
 
   const navigate = useNavigate();
 
+  const token = getToken();
   const storedUser: StoredUser | null = useMemo(() => getStoredUser(), []);
+  const isGuest = !token || !storedUser;
+
   const role: AppRole = storedUser?.role ?? "admin";
 
   const avatarSrc = getAvatarByRoleAndGender({
@@ -161,16 +164,21 @@ export default function AppLayout() {
     role === "owner" || role === "tenant" ? dormName : displayName;
 
   const loadNotificationSummary = useCallback(async () => {
-    if (role === "admin") {
+    if (isGuest || role === "admin") {
       setNotificationSummary(EMPTY_SUMMARY);
       return;
     }
 
     const data = await fetchNotificationSummary();
     setNotificationSummary(data);
-  }, [role]);
+  }, [isGuest, role]);
 
   useEffect(() => {
+    if (isGuest) {
+      setNotificationSummary(EMPTY_SUMMARY);
+      return;
+    }
+
     loadNotificationSummary();
 
     const intervalId = window.setInterval(() => {
@@ -199,84 +207,90 @@ export default function AppLayout() {
         handleNotificationsRefresh as EventListener
       );
     };
-  }, [loadNotificationSummary]);
+  }, [isGuest, loadNotificationSummary]);
 
   return (
     <div className="min-h-screen flex bg-gray-50 font-sans">
-      <aside className="hidden md:flex md:w-72 md:flex-col bg-white shadow-sm">
-        <Brand title={sidebarTitle} onClose={undefined} />
-        <Nav
-          role={role}
-          onNavigate={() => {}}
-          notifications={notificationSummary}
-        />
-      </aside>
-
-      <div
-        className={`fixed inset-0 z-40 md:hidden ${
-          open ? "" : "pointer-events-none"
-        }`}
-      >
-        <div
-          className={`absolute inset-0 bg-black/40 transition-opacity ${
-            open ? "opacity-100" : "opacity-0"
-          }`}
-          onClick={() => setOpen(false)}
-        />
-
-        <aside
-          className={`absolute left-0 top-0 h-full w-72 bg-white shadow-2xl transform transition-transform ${
-            open ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <Brand title={sidebarTitle} onClose={() => setOpen(false)} />
+      {!isGuest && (
+        <aside className="hidden md:flex md:w-72 md:flex-col bg-white shadow-sm">
+          <Brand title={sidebarTitle} onClose={undefined} />
           <Nav
             role={role}
-            onNavigate={() => setOpen(false)}
+            onNavigate={() => {}}
             notifications={notificationSummary}
           />
         </aside>
-      </div>
+      )}
+
+      {!isGuest && (
+        <div
+          className={`fixed inset-0 z-40 md:hidden ${
+            open ? "" : "pointer-events-none"
+          }`}
+        >
+          <div
+            className={`absolute inset-0 bg-black/40 transition-opacity ${
+              open ? "opacity-100" : "opacity-0"
+            }`}
+            onClick={() => setOpen(false)}
+          />
+
+          <aside
+            className={`absolute left-0 top-0 h-full w-72 bg-white shadow-2xl transform transition-transform ${
+              open ? "translate-x-0" : "-translate-x-full"
+            }`}
+          >
+            <Brand title={sidebarTitle} onClose={() => setOpen(false)} />
+            <Nav
+              role={role}
+              onNavigate={() => setOpen(false)}
+              notifications={notificationSummary}
+            />
+          </aside>
+        </div>
+      )}
 
       <main className="flex flex-1 flex-col min-w-0">
-        <header
-          className="
-            flex items-center justify-between
-            h-20 px-6
-            bg-gradient-to-r from-[#e11d48] via-[#f43f8c] to-[#fb7185]
-            shadow-md
-          "
-        >
-          <div className="flex items-center gap-2">
-            <button
-              className="p-2 rounded-lg text-white hover:bg-white/20 md:hidden"
-              onClick={() => setOpen(true)}
-            >
-              <FiMenu size={24} />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-sm font-bold text-white">{headerTitle}</div>
-              <div className="text-xs text-white/90">{displayName}</div>
+        {!isGuest && (
+          <header
+            className="
+              flex items-center justify-between
+              h-20 px-6
+              bg-gradient-to-r from-[#e11d48] via-[#f43f8c] to-[#fb7185]
+              shadow-md
+            "
+          >
+            <div className="flex items-center gap-2">
+              <button
+                className="p-2 rounded-lg text-white hover:bg-white/20 md:hidden"
+                onClick={() => setOpen(true)}
+              >
+                <FiMenu size={24} />
+              </button>
             </div>
 
-            <button
-              type="button"
-              className="rounded-full bg-white p-0.5 shadow"
-              onClick={() => navigate("/profile")}
-            >
-              <img
-                src={avatarSrc}
-                alt="avatar"
-                className="h-10 w-10 rounded-full object-cover"
-              />
-            </button>
-          </div>
-        </header>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="text-sm font-bold text-white">{headerTitle}</div>
+                <div className="text-xs text-white/90">{displayName}</div>
+              </div>
 
-        <div className="overflow-y-auto p-4 md:p-6">
+              <button
+                type="button"
+                className="rounded-full bg-white p-0.5 shadow"
+                onClick={() => navigate("/profile")}
+              >
+                <img
+                  src={avatarSrc}
+                  alt="avatar"
+                  className="h-10 w-10 rounded-full object-cover"
+                />
+              </button>
+            </div>
+          </header>
+        )}
+
+        <div className={isGuest ? "p-0" : "overflow-y-auto p-4 md:p-6"}>
           <Outlet />
         </div>
       </main>

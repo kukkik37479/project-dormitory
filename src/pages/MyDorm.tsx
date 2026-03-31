@@ -19,7 +19,25 @@ import {
   deleteVacancyAnnouncement,
 } from "../service/myDorm.service";
 
-const LOCAL_CACHE_KEY = "my_dorm_local_cache_v1";
+function getMyDormCacheKey() {
+  try {
+    const rawUser =
+      localStorage.getItem("user") || sessionStorage.getItem("user");
+
+    if (!rawUser) {
+      return "my_dorm_local_cache_v2_guest";
+    }
+
+    const user = JSON.parse(rawUser);
+    const userId = user?.id || "unknown-user";
+    const dormId =
+      user?.dorm_id || user?.login_dorm_id || user?.dormId || "unknown-dorm";
+
+    return `my_dorm_local_cache_v2:${userId}:${dormId}`;
+  } catch {
+    return "my_dorm_local_cache_v2_fallback";
+  }
+}
 
 type AmenityValue = string;
 
@@ -221,7 +239,7 @@ function formatMoney(value: string) {
 
 function loadLocalCache() {
   try {
-    const raw = localStorage.getItem(LOCAL_CACHE_KEY);
+    const raw = localStorage.getItem(getMyDormCacheKey());
     return raw ? (JSON.parse(raw) as LocalCache) : null;
   } catch {
     return null;
@@ -229,9 +247,8 @@ function loadLocalCache() {
 }
 
 function saveLocalCache(cache: LocalCache) {
-  localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(cache));
+  localStorage.setItem(getMyDormCacheKey(), JSON.stringify(cache));
 }
-
 async function reverseGeocode(lat: number, lng: number) {
   const res = await fetch(
     `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`

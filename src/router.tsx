@@ -23,6 +23,7 @@ import MyRoom from "./pages/MyRoom";
 import AnnouncementsChat from "./pages/AnnouncementsChat";
 import Reviews from "./pages/Reviews";
 import Overview from "./pages/Overview";
+import AllVacantRooms from "./pages/AllVacantRooms";
 
 function TempPage({ title }: { title: string }) {
   return <div className="p-6 text-xl font-semibold">{title}</div>;
@@ -210,6 +211,10 @@ const router = createBrowserRouter([
             <BillsGateway />
           </RequireRole>
         ),
+      },
+      {
+        path: "/vacancy",
+        element: <AllVacantRooms />,
       },
       {
         path: "my-room",

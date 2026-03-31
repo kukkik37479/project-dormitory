@@ -129,13 +129,20 @@ export default function Explore() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
-        <div className="mb-5 flex items-end justify-between gap-3">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">ห้องว่างแนะนำ</h2>
             <p className="mt-1 text-sm text-gray-500">
               แสดงห้องว่างที่พร้อมเข้าพักจากหอพักที่เปิดให้เข้าชม
             </p>
           </div>
+
+          <Link
+            to="/vacancy"
+            className="inline-flex items-center justify-center rounded-2xl bg-rose-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600"
+          >
+            ดูห้องว่างทั้งหมด
+          </Link>
         </div>
 
         {loading ? (
@@ -148,75 +155,94 @@ export default function Explore() {
           </div>
         ) : vacantRooms.length === 0 ? (
           <div className="rounded-3xl border border-rose-100 bg-white p-8 text-center text-gray-500 shadow-sm">
-            {search ? "ไม่พบห้องว่างตามคำค้นนี้" : "ยังไม่มีห้องว่างแนะนำในตอนนี้"}
+            <div>{search ? "ไม่พบห้องว่างตามคำค้นนี้" : "ยังไม่มีห้องว่างแนะนำในตอนนี้"}</div>
+            <div className="mt-4">
+              <Link
+                to="/vacancy"
+                className="inline-flex items-center rounded-2xl border border-rose-200 bg-white px-5 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+              >
+                ไปหน้าห้องว่างทั้งหมด
+              </Link>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {vacantRooms.map((room) => (
-              <Link
-                key={room.id}
-                to={`/dorms/${room.dorm_slug || room.dorm_id}`}
-                state={{ fromList }}
-                className="group overflow-hidden rounded-3xl border border-rose-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
-              >
-                <div className="relative h-52 overflow-hidden bg-rose-100">
-                  {room.dorm_cover_image ? (
-                    <img
-                      src={room.dorm_cover_image}
-                      alt={room.dorm_name}
-                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-sm text-gray-400">
-                      ไม่มีรูปห้อง/หอพัก
+          <>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {vacantRooms.map((room) => (
+                <Link
+                  key={room.id}
+                  to={`/dorms/${room.dorm_slug || room.dorm_id}`}
+                  state={{ fromList }}
+                  className="group overflow-hidden rounded-3xl border border-rose-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <div className="relative h-52 overflow-hidden bg-rose-100">
+                    {room.dorm_cover_image ? (
+                      <img
+                        src={room.dorm_cover_image}
+                        alt={room.dorm_name}
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-sm text-gray-400">
+                        ไม่มีรูปห้อง/หอพัก
+                      </div>
+                    )}
+
+                    <div className="absolute left-4 top-4 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-rose-600 shadow">
+                      ห้องว่าง
                     </div>
-                  )}
 
-                  <div className="absolute left-4 top-4 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-rose-600 shadow">
-                    ห้องว่าง
+                    <div className="absolute right-4 top-4 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-gray-700 shadow">
+                      {formatPrice(room.monthly_rent)} บาท/เดือน
+                    </div>
                   </div>
 
-                  <div className="absolute right-4 top-4 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-gray-700 shadow">
-                    {formatPrice(room.monthly_rent)} บาท/เดือน
-                  </div>
-                </div>
+                  <div className="p-5">
+                    <h3 className="text-lg font-bold text-gray-900">{room.dorm_name}</h3>
 
-                <div className="p-5">
-                  <h3 className="text-lg font-bold text-gray-900">{room.dorm_name}</h3>
-
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-600">
-                      ห้อง {room.room_number}
-                    </span>
-                    {room.building_name ? (
-                      <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-700">
-                        {room.building_name}
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-600">
+                        ห้อง {room.room_number}
                       </span>
-                    ) : null}
-                    <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-700">
-                      ชั้น {room.floor_no}
-                    </span>
-                    <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-700">
-                      {room.room_type || "ไม่ระบุประเภท"}
-                    </span>
-                  </div>
+                      {room.building_name ? (
+                        <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-700">
+                          {room.building_name}
+                        </span>
+                      ) : null}
+                      <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-700">
+                        ชั้น {room.floor_no}
+                      </span>
+                      <span className="rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-700">
+                        {room.room_type || "ไม่ระบุประเภท"}
+                      </span>
+                    </div>
 
-                  <p className="mt-3 min-h-[48px] text-sm leading-6 text-gray-600">
-                    {room.dorm_full_address || "ยังไม่มีข้อมูลที่อยู่"}
-                  </p>
+                    <p className="mt-3 min-h-[48px] text-sm leading-6 text-gray-600">
+                      {room.dorm_full_address || "ยังไม่มีข้อมูลที่อยู่"}
+                    </p>
 
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <span className="text-sm text-gray-500">
-                      โทร: {room.dorm_phone || "-"}
-                    </span>
-                    <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
-                      ดูรายละเอียด
-                    </span>
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                      <span className="text-sm text-gray-500">
+                        โทร: {room.dorm_phone || "-"}
+                      </span>
+                      <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
+                        ดูรายละเอียด
+                      </span>
+                    </div>
                   </div>
-                </div>
+                </Link>
+              ))}
+            </div>
+
+            <div className="mt-6 flex justify-center">
+              <Link
+                to="/vacancy"
+                className="inline-flex items-center rounded-2xl border border-rose-200 bg-white px-5 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+              >
+                ดูห้องว่างทั้งหมด
               </Link>
-            ))}
-          </div>
+            </div>
+          </>
         )}
       </section>
 

@@ -13,6 +13,8 @@ function mapRegisterError(message: string): string {
       return "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร";
     case "Email already exists":
       return "อีเมลนี้ถูกใช้งานแล้ว";
+    case "dorm_name_en must contain English letters only (numbers, spaces, and hyphen are allowed)":
+      return "ชื่อหอพักภาษาอังกฤษต้องใช้ตัวอักษรอังกฤษเท่านั้น โดยใช้ตัวเลข ช่องว่าง และ - ได้";
     default:
       return message || "สมัครสมาชิกไม่สำเร็จ";
   }
@@ -29,6 +31,17 @@ function mapLoginError(message: string): string {
     default:
       return message || "เข้าสู่ระบบไม่สำเร็จ";
   }
+}
+
+function isEnglishDormName(value: string) {
+  const normalized = value.trim();
+
+  if (!normalized) return false;
+
+  const allowedPattern = /^[A-Za-z0-9][A-Za-z0-9\s-]*$/;
+  const hasEnglishLetter = /[A-Za-z]/.test(normalized);
+
+  return allowedPattern.test(normalized) && hasEnglishLetter;
 }
 
 export default function Sign() {
@@ -81,7 +94,13 @@ export default function Sign() {
         return;
       }
 
-      // 1) สมัคร owner + สร้าง dorm พร้อมกัน
+      if (!isEnglishDormName(dormNameEn)) {
+        setErr(
+          "ชื่อหอพักภาษาอังกฤษต้องใช้ตัวอักษรอังกฤษเท่านั้น โดยใช้ตัวเลข ช่องว่าง และ - ได้"
+        );
+        return;
+      }
+
       const registerRes = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: {
@@ -105,12 +124,10 @@ export default function Sign() {
         return;
       }
 
-      // backend ส่ง login_identifier กลับมา เช่น ownera@naja
       const loginIdentifier =
         registerData.login_identifier ||
         `${username.trim().toLowerCase()}@${registerData?.dorm?.dorm_slug}`;
 
-      // 2) login อัตโนมัติด้วย username@dorm_slug
       const loginRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: {
@@ -133,12 +150,10 @@ export default function Sign() {
         return;
       }
 
-      // 3) เก็บ token / user
       localStorage.setItem("token", loginData.token);
       localStorage.setItem("user", JSON.stringify(loginData.user));
 
-      // 4) ไปหน้าถัดไป
-      navigate("/explore");
+      navigate("/home", { replace: true });
     } catch (error) {
       setErr("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
     } finally {
@@ -185,9 +200,12 @@ export default function Sign() {
                 value={dormNameEn}
                 onChange={(e) => setDormNameEn(e.target.value)}
                 className="w-full h-12 rounded-xl border border-pink-200 bg-pink-50 px-4 outline-none focus:ring-2 focus:ring-pink-300"
-                placeholder="กรอกชื่อหอพักภาษาอังกฤษ"
+                placeholder="เช่น Naja Dorm"
                 required
               />
+              <p className="text-xs text-gray-500 mt-2">
+                ใช้ได้เฉพาะ A-Z, a-z, 0-9, ช่องว่าง และ -
+              </p>
             </div>
 
             <div className="grid md:grid-cols-2 gap-5">
