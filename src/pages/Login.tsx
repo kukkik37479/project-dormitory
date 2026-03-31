@@ -15,6 +15,12 @@ function mapApiError(message: string): string {
       return "รูปแบบการเข้าสู่ระบบไม่ถูกต้อง";
     case "This account is inactive":
       return "บัญชีนี้ถูกระงับการใช้งาน";
+    case "identifier and new_password are required":
+      return "กรุณากรอกชื่อผู้ใช้@ชื่อหอ และรหัสผ่านใหม่";
+    case "New password must be at least 6 characters":
+      return "รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร";
+    case "User not found":
+      return "ไม่พบบัญชีผู้ใช้นี้";
     default:
       return message || "เข้าสู่ระบบไม่สำเร็จ";
   }
@@ -77,6 +83,59 @@ export default function Login() {
     }
   };
 
+  const handleForgotPasswordDemo = async () => {
+    setErr("");
+
+    const promptIdentifier = window.prompt(
+      "กรอก Username@ชื่อหอภาษาอังกฤษ",
+      identifier.trim()
+    );
+    if (!promptIdentifier) return;
+
+    const promptNewPassword = window.prompt(
+      "กรอกรหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)"
+    );
+    if (!promptNewPassword) return;
+
+    const promptConfirmPassword = window.prompt("ยืนยันรหัสผ่านใหม่อีกครั้ง");
+    if (!promptConfirmPassword) return;
+
+    if (promptNewPassword !== promptConfirmPassword) {
+      setErr("ยืนยันรหัสผ่านใหม่ไม่ตรงกัน");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password-demo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          identifier: promptIdentifier.trim().toLowerCase(),
+          new_password: promptNewPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErr(mapApiError(data.message));
+        return;
+      }
+
+      window.alert("รีเซ็ตรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่");
+      setIdentifier(promptIdentifier.trim().toLowerCase());
+      setPass("");
+    } catch (error) {
+      setErr("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white text-black flex flex-col items-center justify-center p-6">
       <img
@@ -132,7 +191,7 @@ export default function Login() {
             <button
               type="button"
               className="font-semibold hover:underline"
-              onClick={() => alert("Implement forgot password")}
+              onClick={handleForgotPasswordDemo}
             >
               Forgot Password?
             </button>
