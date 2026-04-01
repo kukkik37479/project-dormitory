@@ -461,68 +461,68 @@ export default function TenantRepair() {
 
               <form onSubmit={handleSubmit}>
                 <div style={{ marginBottom: 16 }}>
-                  <label
-                    htmlFor="repair-category"
-                    style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
-                  >
-                    หมวดหมู่
-                  </label>
-                  <select
-                    id="repair-category"
-                    value={selectedFurnitureCategory}
-                    onChange={(e) => setSelectedFurnitureCategory(e.target.value)}
-                    disabled={furnitureCategoryOptions.length === 0}
-                    style={{
-                      width: "100%",
+                    <label
+                      htmlFor="repair-category"
+                      style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                    >
+                      หมวดหมู่
+                    </label>
+                    <select
+                      id="repair-category"
+                      value={selectedFurnitureCategory}
+                      onChange={(e) => setSelectedFurnitureCategory(e.target.value)}
+                      disabled={furnitureCategoryOptions.length === 0}
+                      style={{
+                        width: "100%",
                       height: 48,
-                      borderRadius: 12,
-                      border: "1px solid #E5E7EB",
-                      padding: "0 14px",
+                        borderRadius: 12,
+                        border: "1px solid #E5E7EB",
+                        padding: "0 14px",
                       fontSize: 15,
-                      boxSizing: "border-box",
-                      background: "#FFFFFF",
-                    }}
-                  >
-                    {furnitureCategoryOptions.length === 0 ? (
-                      <option value="">ยังไม่มีหมวดหมู่เฟอร์นิเจอร์</option>
-                    ) : (
-                      furnitureCategoryOptions.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
+                        boxSizing: "border-box",
+                        background: "#FFFFFF",
+                      }}
+                    >
+                      {furnitureCategoryOptions.length === 0 ? (
+                        <option value="">ยังไม่มีหมวดหมู่เฟอร์นิเจอร์</option>
+                      ) : (
+                        furnitureCategoryOptions.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
 
                 <div style={{ marginBottom: 16 }}>
-                  <label
-                    htmlFor="repair-priority"
-                    style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
-                  >
-                    ระดับความเร่งด่วน
-                  </label>
-                  <select
-                    id="repair-priority"
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value as RepairPriorityValue)}
-                    style={{
-                      width: "100%",
+                    <label
+                      htmlFor="repair-priority"
+                      style={{ display: "block", marginBottom: 8, fontWeight: 600 }}
+                    >
+                      ระดับความเร่งด่วน
+                    </label>
+                    <select
+                      id="repair-priority"
+                      value={priority}
+                      onChange={(e) => setPriority(e.target.value as RepairPriorityValue)}
+                      style={{
+                        width: "100%",
                       height: 48,
-                      borderRadius: 12,
-                      border: "1px solid #E5E7EB",
-                      padding: "0 14px",
+                        borderRadius: 12,
+                        border: "1px solid #E5E7EB",
+                        padding: "0 14px",
                       fontSize: 15,
-                      boxSizing: "border-box",
-                      background: "#FFFFFF",
-                    }}
-                  >
-                    {(formOptions?.priorities || []).map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
+                        boxSizing: "border-box",
+                        background: "#FFFFFF",
+                      }}
+                    >
+                      {(formOptions?.priorities || []).map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
